@@ -532,12 +532,10 @@ input, select, textarea, button { font-family: inherit; }
 .category-pills {
   display: flex;
   gap: 10px;
-  overflow-x: auto;
+  flex-wrap: wrap;
   padding-bottom: 8px;
   margin-bottom: 20px;
-  scrollbar-width: none;
 }
-.category-pills::-webkit-scrollbar { display: none; }
 
 .pill {
   padding: 8px 18px;
@@ -1560,7 +1558,14 @@ input, select, textarea, button { font-family: inherit; }
 
   .grid { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .search-filters { flex-direction: column; }
+  .search-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .search-filters .form-group {
+    min-width: 0;
+  }
   .page-title { font-size: 1.4rem; }
 }
 
