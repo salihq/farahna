@@ -5,9 +5,12 @@
 const mongoose = require('mongoose');
 const dns = require('dns');
 
-// Use Google Public DNS to resolve MongoDB Atlas hostnames
+// Use Google Public DNS only in development
 // (some local DNS servers can't resolve SRV records)
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+// In production (Render, etc.), the default DNS works fine
+if (process.env.NODE_ENV !== 'production') {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+}
 
 async function connectDB() {
   const uri = process.env.MONGODB_URI;
