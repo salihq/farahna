@@ -198,10 +198,10 @@ window.db.updatePlan = async function(plan) {
   });
 };
 
-window.db.reservePlan = async function(clientId, dateStr, vendorIds, organizerName, guests) {
+window.db.reservePlan = async function(clientId, dateStr, vendorIds, organizerName, guests, name, status) {
   return await api('/api/plans/reserve', {
     method: 'POST',
-    body: JSON.stringify({ clientId, dateStr, vendorIds, organizerName, guests })
+    body: JSON.stringify({ clientId, dateStr, vendorIds, organizerName, guests, name, status })
   });
 };
 

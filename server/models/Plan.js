@@ -10,6 +10,10 @@ const planSchema = new mongoose.Schema({
     type: String,
     default: 'عميل غير مسجل'
   },
+  name: {
+    type: String,
+    default: 'خطة مقترحة'
+  },
   dateStr: {
     type: String,
     required: true
@@ -24,7 +28,7 @@ const planSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['confirmed', 'pending', 'completed', 'cancelled'],
+    enum: ['confirmed', 'pending', 'completed', 'cancelled', 'draft'],
     default: 'confirmed'
   },
   totalCost: {

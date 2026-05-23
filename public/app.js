@@ -215,6 +215,12 @@ async function renderOrgPlan(container) {
     pillsHtml += '<div class="pill" data-id="' + s.id + '"><i class="fa-solid ' + s.icon + '"></i> ' + s.name + '</div>';
   });
 
+  const plans = await window.db.getPlans();
+  let draftOptions = '<option value="">اختر مسودة مسجلة...</option>';
+  plans.filter(p => p.status === 'draft').forEach(p => {
+    draftOptions += `<option value="${p._id || p.id}">${p.clientName} - ${p.name || 'خطة'} (${p.dateStr})</option>`;
+  });
+
   container.innerHTML =
     '<div class="search-layout" style="height:100%;">' +
       '<div class="search-main" style="height:100%; overflow-y:auto;">' +
@@ -244,12 +250,17 @@ async function renderOrgPlan(container) {
 
       '<div class="cart-sidebar">' +
         '<div class="cart-header"><i class="fa-solid fa-clipboard-list" style="color:var(--primary); font-size:1.3rem;"></i><h3>سلة التخطيط</h3><div class="cart-count" id="cart-count">0</div></div>' +
-        '<div class="cart-items" id="cart-items"></div>' +
+        '<div class="form-group"><label>اسم الخطة</label><input type="text" id="plan-name" value="' + (cart.name || 'خطة مقترحة') + '" style="margin-bottom:8px;"></div>' +
+        '<div class="form-group"><label>تحميل مسودة</label><select id="plan-load" style="margin-bottom:8px;">' + draftOptions + '</select></div>' +
+        '<div class="cart-items" id="cart-items" style="max-height:35vh;"></div>' +
         '<div class="cart-summary">' +
           '<div id="budget-progress"></div>' +
           '<div class="cart-total"><span>الإجمالي:</span><span id="cart-sum">0 شيكل</span></div>' +
           '<div id="budget-warn"></div>' +
-          '<button class="btn btn-success btn-lg w-full" id="btn-reserve" style="margin-top:12px;"><i class="fa-solid fa-check-double"></i> اعتماد الخطة والحجز</button>' +
+          '<div style="display:flex; gap:8px; margin-top:12px;">' +
+            '<button class="btn btn-outline flex-1" id="btn-draft"><i class="fa-solid fa-save"></i> حفظ كمسودة</button>' +
+            '<button class="btn btn-success flex-1" id="btn-reserve"><i class="fa-solid fa-check-double"></i> اعتماد الخطة</button>' +
+          '</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -452,6 +463,33 @@ async function renderOrgPlan(container) {
     });
   });
 
+  // Load Draft logic
+  document.getElementById('plan-load').addEventListener('change', async (e) => {
+    const planId = e.target.value;
+    if (!planId) return;
+    const plan = plans.find(p => (p._id || p.id) === planId);
+    if (plan) {
+      document.getElementById('plan-name').value = plan.name || 'خطة مقترحة';
+      document.getElementById('plan-date').value = plan.dateStr;
+      document.getElementById('plan-guests').value = plan.guests;
+      if (plan.clientId) document.getElementById('plan-client').value = plan.clientId;
+      
+      const vObjs = window._planVendors.filter(v => plan.vendorIds.includes(v.id));
+      cart = { 
+        id: plan._id || plan.id,
+        clientId: plan.clientId || '', 
+        date: plan.dateStr, 
+        guests: plan.guests, 
+        vendors: vObjs,
+        name: plan.name || 'خطة مقترحة'
+      };
+      updateCartUI();
+      loadVendors();
+    }
+  });
+
+  document.getElementById('plan-name').addEventListener('input', (e) => cart.name = e.target.value);
+
   // Reserve button
   document.getElementById('btn-reserve').addEventListener('click', async () => {
     const validation = window.Services.Validation.validateBooking(cart);
@@ -463,12 +501,38 @@ async function renderOrgPlan(container) {
     if (!ok) return;
 
     const vIds = cart.vendors.map(v => v.id);
-    await window.db.reservePlan(cart.clientId, cart.date, vIds, currentUser.name, cart.guests);
+    const pName = document.getElementById('plan-name').value || 'خطة مقترحة';
+    
+    if (cart.id) {
+      await window.db.updatePlan({ id: cart.id, status: 'confirmed', name: pName, vendorIds: vIds, guests: cart.guests, dateStr: cart.date, clientId: cart.clientId });
+    } else {
+      await window.db.reservePlan(cart.clientId, cart.date, vIds, currentUser.name, cart.guests, pName, 'confirmed');
+    }
 
     window.UI.toast('تم الحجز بنجاح! تم إشعار جميع المزودين', 'success');
-    cart = { clientId: '', date: '', guests: 100, vendors: [] };
-    updateCartUI();
-    loadVendors();
+    cart = { id: null, clientId: '', date: '', guests: 100, vendors: [], name: '' };
+    renderOrgPlan(document.querySelector('.main-content')); // refresh to update drafts
+  });
+
+  // Draft button
+  document.getElementById('btn-draft').addEventListener('click', async () => {
+    const validation = window.Services.Validation.validateBooking(cart);
+    if (!validation.valid) {
+      window.UI.toast(validation.errors[0], 'error');
+      return;
+    }
+    const vIds = cart.vendors.map(v => v.id);
+    const pName = document.getElementById('plan-name').value || 'مسودة خطة';
+    
+    if (cart.id) {
+      await window.db.updatePlan({ id: cart.id, status: 'draft', name: pName, vendorIds: vIds, guests: cart.guests, dateStr: cart.date, clientId: cart.clientId });
+    } else {
+      await window.db.reservePlan(cart.clientId, cart.date, vIds, currentUser.name, cart.guests, pName, 'draft');
+    }
+
+    window.UI.toast('تم حفظ المسودة بنجاح (بدون إشعار المزودين)', 'info');
+    cart = { id: null, clientId: '', date: '', guests: 100, vendors: [], name: '' };
+    renderOrgPlan(document.querySelector('.main-content')); // refresh to update drafts
   });
 
   updateCartUI();
@@ -1323,30 +1387,93 @@ async function renderVendorProfile(container) {
       '<div class="page-header"><div><h1 class="page-title"><i class="fa-solid fa-id-card" style="color:var(--primary);"></i> الملف الشخصي</h1></div></div>' +
       '<div class="card" style="max-width:600px;">' +
         '<form id="profile-form">' +
-          '<div class="form-group"><label>الاسم</label><input type="text" id="p-name" value="' + currentUser.name + '"></div>' +
+          '<div class="form-group"><label>الاسم (لا يمكن تغييره)</label><input type="text" id="p-name" value="' + currentUser.name + '" disabled></div>' +
           '<div class="form-group"><label>البريد</label><input type="email" id="p-email" value="' + currentUser.email + '" disabled></div>' +
-          '<div class="form-group"><label>الجوال</label><input type="text" id="p-phone" value="' + (currentUser.phone || '') + '"></div>' +
-          '<div class="form-group"><label>نوع الخدمة</label><select id="p-service">' + srvOpts + '</select></div>' +
+          '<div class="form-group"><label>الجوال الأساسي</label><input type="text" id="p-phone" value="' + (currentUser.phone || '') + '"></div>' +
+          '<div class="form-group"><label>نوع الخدمة (لا يمكن تغييره)</label><select id="p-service" disabled>' + srvOpts + '</select></div>' +
+          '<div class="form-group"><label>الموقع / العنوان (مثال: اسم القاعة أو المدينة)</label><input type="text" id="p-location" value="' + (currentUser.location || '') + '"></div>' +
           '<div class="form-row">' +
-            '<div class="form-group"><label>السعر</label><input type="number" id="p-price" value="' + currentUser.price + '"></div>' +
+            '<div class="form-group"><label>السعر الأساسي</label><input type="number" id="p-price" value="' + currentUser.price + '"></div>' +
             '<div class="form-group"><label>نوع التسعير</label><select id="p-pricing"><option value="flat" ' + (currentUser.pricingType === 'flat' ? 'selected' : '') + '>مقطوع</option><option value="perPerson" ' + (currentUser.pricingType === 'perPerson' ? 'selected' : '') + '>للشخص</option></select></div>' +
           '</div>' +
           '<div class="form-group"><label>السعة القصوى</label><input type="number" id="p-cap" value="' + (currentUser.maxCapacity || '') + '" placeholder="اختياري"></div>' +
           '<div class="form-group"><label>وصف الخدمة</label><textarea id="p-desc" rows="3">' + (currentUser.description || '') + '</textarea></div>' +
-          '<button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> حفظ التعديلات</button>' +
+          
+          '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
+            '<h3><i class="fa-solid fa-address-book"></i> جهات اتصال إضافية</h3>' +
+            '<div id="contacts-list" style="margin-top: 12px;"></div>' +
+            '<button type="button" class="btn btn-outline btn-sm mt-8" id="btn-add-contact"><i class="fa-solid fa-plus"></i> إضافة رقم</button>' +
+          '</div>' +
+          
+          '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
+            '<h3><i class="fa-solid fa-calendar-star"></i> أسعار التواريخ الخاصة (أعياد، نهاية أسبوع)</h3>' +
+            '<div id="pricing-list" style="margin-top: 12px;"></div>' +
+            '<button type="button" class="btn btn-outline btn-sm mt-8" id="btn-add-pricing"><i class="fa-solid fa-plus"></i> إضافة سعر لتاريخ</button>' +
+          '</div>' +
+
+          '<button type="submit" class="btn btn-primary" style="margin-top: 32px;"><i class="fa-solid fa-save"></i> حفظ التعديلات</button>' +
         '</form>' +
       '</div>' +
     '</div>';
 
+  let contacts = [...(currentUser.contacts || [])];
+  let specialPricing = [...(currentUser.specialPricing || [])];
+
+  const renderContacts = () => {
+    const list = document.getElementById('contacts-list');
+    list.innerHTML = '';
+    contacts.forEach((c, i) => {
+      list.innerHTML += '<div style="display:flex; gap:8px; margin-bottom:8px;">' +
+        '<input type="text" placeholder="الاسم (مثال: الإدارة)" class="c-name flex-1" value="' + c.name + '">' +
+        '<input type="text" placeholder="رقم الجوال" class="c-phone flex-1" value="' + c.phone + '">' +
+        '<button type="button" class="btn btn-danger btn-icon" onclick="window._removeContact(' + i + ')"><i class="fa-solid fa-trash"></i></button>' +
+      '</div>';
+    });
+  };
+
+  const renderPricing = () => {
+    const list = document.getElementById('pricing-list');
+    list.innerHTML = '';
+    specialPricing.forEach((p, i) => {
+      list.innerHTML += '<div style="display:flex; gap:8px; margin-bottom:8px;">' +
+        '<input type="date" class="p-date flex-1" value="' + p.dateStr + '">' +
+        '<input type="number" placeholder="السعر" class="p-val flex-1" value="' + p.price + '">' +
+        '<button type="button" class="btn btn-danger btn-icon" onclick="window._removePricing(' + i + ')"><i class="fa-solid fa-trash"></i></button>' +
+      '</div>';
+    });
+  };
+
+  window._removeContact = (i) => { contacts.splice(i, 1); renderContacts(); };
+  window._removePricing = (i) => { specialPricing.splice(i, 1); renderPricing(); };
+
+  document.getElementById('btn-add-contact').addEventListener('click', () => { contacts.push({ name: '', phone: '' }); renderContacts(); });
+  document.getElementById('btn-add-pricing').addEventListener('click', () => { specialPricing.push({ dateStr: '', price: 0 }); renderPricing(); });
+
+  renderContacts();
+  renderPricing();
+
   document.getElementById('profile-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    currentUser.name = document.getElementById('p-name').value.trim();
+    
+    // Update contacts state from DOM
+    const cNames = document.querySelectorAll('.c-name');
+    const cPhones = document.querySelectorAll('.c-phone');
+    contacts = Array.from(cNames).map((el, i) => ({ name: el.value, phone: cPhones[i].value })).filter(c => c.name || c.phone);
+    
+    // Update pricing state from DOM
+    const pDates = document.querySelectorAll('.p-date');
+    const pVals = document.querySelectorAll('.p-val');
+    specialPricing = Array.from(pDates).map((el, i) => ({ dateStr: el.value, price: parseInt(pVals[i].value) || 0 })).filter(p => p.dateStr && p.price > 0);
+
     currentUser.phone = document.getElementById('p-phone').value.trim();
-    currentUser.serviceId = document.getElementById('p-service').value;
+    currentUser.location = document.getElementById('p-location').value.trim();
     currentUser.price = parseInt(document.getElementById('p-price').value) || 0;
     currentUser.pricingType = document.getElementById('p-pricing').value;
     currentUser.maxCapacity = parseInt(document.getElementById('p-cap').value) || null;
     currentUser.description = document.getElementById('p-desc').value.trim();
+    currentUser.contacts = contacts;
+    currentUser.specialPricing = specialPricing;
+    
     await window.db.updateVendor(currentUser);
     window.UI.toast('تم تحديث الملف الشخصي', 'success');
   });

@@ -133,7 +133,7 @@ router.get('/:id/export', async (req, res) => {
 // ─── POST /reserve — Create a reservation plan (organizer) ──
 router.post('/reserve', requireRole('organizer'), async (req, res) => {
   try {
-    const { clientId, dateStr, vendorIds, guests, organizerName } = req.body;
+    const { clientId, dateStr, vendorIds, guests, organizerName, name, status } = req.body;
 
     if (!dateStr || !vendorIds || !Array.isArray(vendorIds) || vendorIds.length === 0) {
       return res.status(400).json({ error: 'التاريخ والمزوّدون مطلوبون' });
@@ -143,10 +143,14 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
     const vendors = await User.find({ _id: { $in: vendorIds } }).select('-password');
 
     const totalCost = vendors.reduce((sum, v) => {
+      // Find if there's a special price for this date
+      const special = v.specialPricing && v.specialPricing.find(sp => sp.dateStr === dateStr);
+      const effectivePrice = special ? special.price : (v.price || 0);
+
       if (v.pricingType === 'perPerson' && guests) {
-        return sum + (v.price * guests);
+        return sum + (effectivePrice * guests);
       }
-      return sum + (v.price || 0);
+      return sum + effectivePrice;
     }, 0);
 
     // Get client name if linked
@@ -156,48 +160,52 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
       if (client) clientName = client.name;
     }
 
+    const planStatus = status || 'confirmed';
+
     // Create the plan
     const plan = await Plan.create({
       clientId: clientId || null,
       clientName,
+      name: name || 'خطة مقترحة',
       dateStr,
       vendorIds,
       guests: guests || 0,
       totalCost,
-      status: 'confirmed'
+      status: planStatus
     });
 
-    // Update client status to 'booked' if linked
-    if (clientId) {
-      await Client.findByIdAndUpdate(clientId, { status: 'booked' });
-    }
+    // If confirmed, notify vendors and update client
+    if (planStatus === 'confirmed') {
+      if (clientId) {
+        await Client.findByIdAndUpdate(clientId, { status: 'booked' });
+      }
 
-    // For each vendor: add date to booking & create notification
-    for (const vendor of vendors) {
-      await Booking.findOneAndUpdate(
-        { vendorId: vendor._id },
-        { $addToSet: { dates: dateStr } },
-        { upsert: true }
-      );
+      for (const vendor of vendors) {
+        await Booking.findOneAndUpdate(
+          { vendorId: vendor._id },
+          { $addToSet: { dates: dateStr } },
+          { upsert: true }
+        );
 
-      await Notification.create({
-        vendorId: vendor._id,
-        message: `لديك حجز جديد بتاريخ ${dateStr}`,
-        details: {
-          planId: plan._id.toString(),
-          clientName,
-          organizerName: organizerName || req.user.name,
-          date: dateStr,
-          guests
-        },
-        read: false
-      });
+        await Notification.create({
+          vendorId: vendor._id,
+          message: `لديك حجز جديد بتاريخ ${dateStr}`,
+          details: {
+            planId: plan._id.toString(),
+            clientName,
+            organizerName: organizerName || req.user.name,
+            date: dateStr,
+            guests
+          },
+          read: false
+        });
+      }
     }
 
     // Log activity
     await ActivityLog.create({
       type: 'plan',
-      message: 'تم إنشاء خطة حجز جديدة بتاريخ ' + dateStr + ' لـ ' + clientName
+      message: (planStatus === 'draft' ? 'تم حفظ خطة مبدئية بتاريخ ' : 'تم إنشاء حجز مؤكد بتاريخ ') + dateStr + ' لـ ' + clientName
     });
 
     res.status(201).json(plan);
@@ -210,10 +218,50 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
 // ─── PUT /:id — Update plan (organizer) ─────────────────────
 router.put('/:id', requireRole('organizer'), async (req, res) => {
   try {
-    const plan = await Plan.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!plan) {
+    const oldPlan = await Plan.findById(req.params.id);
+    if (!oldPlan) {
       return res.status(404).json({ error: 'الخطة غير موجودة' });
     }
+
+    const wasDraft = oldPlan.status === 'draft';
+    const isNowConfirmed = req.body.status === 'confirmed';
+
+    Object.assign(oldPlan, req.body);
+    const plan = await oldPlan.save();
+
+    if (wasDraft && isNowConfirmed) {
+      if (plan.clientId) {
+        await Client.findByIdAndUpdate(plan.clientId, { status: 'booked' });
+      }
+
+      const vendors = await User.find({ _id: { $in: plan.vendorIds } }).select('-password');
+      for (const vendor of vendors) {
+        await Booking.findOneAndUpdate(
+          { vendorId: vendor._id },
+          { $addToSet: { dates: plan.dateStr } },
+          { upsert: true }
+        );
+
+        await Notification.create({
+          vendorId: vendor._id,
+          message: `لديك حجز مؤكد بتاريخ ${plan.dateStr}`,
+          details: {
+            planId: plan._id.toString(),
+            clientName: plan.clientName,
+            organizerName: req.user.name,
+            date: plan.dateStr,
+            guests: plan.guests
+          },
+          read: false
+        });
+      }
+      
+      await ActivityLog.create({
+        type: 'plan',
+        message: 'تم تأكيد الحجز بتاريخ ' + plan.dateStr + ' لـ ' + plan.clientName
+      });
+    }
+
     res.json(plan);
   } catch (err) {
     console.error('Update plan error:', err.message);

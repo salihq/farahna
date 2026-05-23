@@ -38,6 +38,18 @@ const userSchema = new mongoose.Schema({
     enum: ['flat', 'perPerson'],
     default: 'flat'
   },
+  specialPricing: [{
+    dateStr: String,
+    price: Number
+  }],
+  location: {
+    type: String,
+    default: ''
+  },
+  contacts: [{
+    name: String,
+    phone: String
+  }],
   maxCapacity: {
     type: Number,
     default: null

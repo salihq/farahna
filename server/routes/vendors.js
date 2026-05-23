@@ -82,13 +82,18 @@ router.post('/', auth, requireRole('organizer'), async (req, res) => {
 // ─── PUT /:id — Update vendor ───────────────────────────────
 router.put('/:id', auth, async (req, res) => {
   try {
-    const allowedFields = ['name', 'phone', 'price', 'pricingType', 'maxCapacity', 'description', 'photos', 'serviceId'];
+    const allowedFields = ['name', 'phone', 'price', 'pricingType', 'maxCapacity', 'description', 'photos', 'serviceId', 'location', 'contacts', 'specialPricing'];
     const updates = {};
 
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         updates[field] = req.body[field];
       }
+    }
+
+    if (req.user.role === 'vendor') {
+      delete updates.name;
+      delete updates.serviceId;
     }
 
     const vendor = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true }).select('-password');
