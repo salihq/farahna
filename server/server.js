@@ -12,6 +12,9 @@ const seedDatabase = require('./seed');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ─── Trust Proxy (required for Render / reverse proxies) ────
+app.set('trust proxy', 1);
+
 // ─── Security Middleware ─────────────────────────────────────
 applySecurity(app);
 
