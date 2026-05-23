@@ -25,7 +25,7 @@ router.post('/login', async (req, res) => {
 
     const token = generateToken(user._id);
 
-    const userObj = user.toObject();
+    const userObj = user.toJSON();
     delete userObj.password;
 
     res.json({ token, user: userObj });
@@ -38,7 +38,9 @@ router.post('/login', async (req, res) => {
 // ─── GET /me ─────────────────────────────────────────────────
 router.get('/me', auth, async (req, res) => {
   try {
-    res.json(req.user);
+    const userObj = req.user.toJSON();
+    delete userObj.password;
+    res.json(userObj);
   } catch (err) {
     console.error('Get profile error:', err.message);
     res.status(500).json({ error: 'حدث خطأ في الخادم' });

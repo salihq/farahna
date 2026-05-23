@@ -38,6 +38,9 @@ router.get('/available/search', async (req, res) => {
 // ─── GET /:vendorId — Get booking dates for a vendor ────────
 router.get('/:vendorId', async (req, res) => {
   try {
+    if (!req.params.vendorId || req.params.vendorId === 'undefined') {
+      return res.json({ dates: [] });
+    }
     const booking = await Booking.findOne({ vendorId: req.params.vendorId });
     res.json({ dates: booking ? booking.dates : [] });
   } catch (err) {
