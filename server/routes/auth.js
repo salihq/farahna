@@ -47,4 +47,21 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+// ─── POST /reset-db — Drop all data and re-seed (organizer only) ─
+router.post('/reset-db', auth, requireRole('organizer'), async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    for (const col of collections) {
+      await mongoose.connection.db.dropCollection(col.name);
+    }
+    const seedDatabase = require('../seed');
+    await seedDatabase();
+    res.json({ message: 'تم إعادة تعيين قاعدة البيانات بنجاح. يرجى تسجيل الدخول مرة أخرى.' });
+  } catch (err) {
+    console.error('Reset DB error:', err.message);
+    res.status(500).json({ error: 'حدث خطأ أثناء إعادة التعيين' });
+  }
+});
+
 module.exports = router;

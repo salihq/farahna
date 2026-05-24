@@ -1218,11 +1218,12 @@ function renderOrgSettings(container) {
 
       '<div class="card mb-24">' +
         '<h3 style="margin-bottom:16px; font-weight:800;"><i class="fa-solid fa-database"></i> قاعدة البيانات</h3>' +
-        '<p class="text-sm text-muted mb-16">قاعدة البيانات تعمل على MongoDB Atlas (سحابي). إعادة التعيين تتطلب صلاحيات خادم.</p>' +
-        '<div style="display:flex; align-items:center; gap:8px; padding:12px; background:var(--success-light); border-radius:var(--radius-sm);">' +
+        '<p class="text-sm text-muted mb-16">قاعدة البيانات تعمل على MongoDB Atlas (سحابي). إعادة التعيين ستحذف جميع البيانات وتعيد البيانات التجريبية.</p>' +
+        '<div style="display:flex; align-items:center; gap:8px; padding:12px; background:var(--success-light); border-radius:var(--radius-sm); margin-bottom:16px;">' +
           '<i class="fa-solid fa-circle-check" style="color:var(--success);"></i>' +
           '<span class="text-sm" style="font-weight:600;">قاعدة البيانات متصلة وتعمل بكفاءة</span>' +
         '</div>' +
+        '<button class="btn btn-danger" id="btn-reset-db"><i class="fa-solid fa-rotate-left"></i> إعادة تعيين قاعدة البيانات (بيانات تجريبية)</button>' +
       '</div>' +
 
       '<div class="card mb-24">' +
@@ -1244,6 +1245,24 @@ function renderOrgSettings(container) {
     document.body.className = 'dark-mode';
     localStorage.setItem('theme', 'dark-mode');
     renderOrgSettings(container);
+  });
+  document.getElementById('btn-reset-db').addEventListener('click', async () => {
+    const ok = await window.UI.confirm('⚠️ هل أنت متأكد؟ سيتم حذف جميع البيانات وإعادة زرع بيانات تجريبية!');
+    if (!ok) return;
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch('/api/auth/reset-db', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+      });
+      const data = await resp.json();
+      if (data.error) { window.UI.toast(data.error, 'error'); return; }
+      window.UI.toast('تم إعادة التعيين. جاري إعادة التحميل...', 'success');
+      localStorage.removeItem('token');
+      setTimeout(() => location.reload(), 1500);
+    } catch (err) {
+      window.UI.toast('حدث خطأ أثناء إعادة التعيين', 'error');
+    }
   });
 }
 
