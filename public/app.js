@@ -1403,20 +1403,34 @@ async function renderVendorCalendar(container) {
   const now = new Date();
   let currentMonth = now.getMonth();
   let currentYear = now.getFullYear();
+  const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
+  // Build month options
+  let monthOpts = '';
+  months.forEach((m, i) => { monthOpts += '<option value="' + i + '">' + m + '</option>'; });
+
+  // Build year options (current -2 to +3)
+  let yearOpts = '';
+  for (let y = currentYear - 2; y <= currentYear + 3; y++) {
+    yearOpts += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
+  }
 
   container.innerHTML =
     '<div class="animate-in">' +
       '<div class="page-header"><div><h1 class="page-title"><i class="fa-solid fa-calendar-days" style="color:var(--primary);"></i> التقويم</h1><p class="page-subtitle">انقر على أي يوم لتبديل حالته (متاح / محجوز)</p></div></div>' +
       '<div class="card" style="padding:24px;">' +
-        '<div class="calendar-header">' +
+        '<div class="calendar-header" style="flex-wrap:wrap; gap:12px;">' +
           '<div class="calendar-nav">' +
-            '<button class="btn btn-outline btn-sm" id="cal-prev"><i class="fa-solid fa-chevron-right"></i></button>' +
-            '<button class="btn-today" id="cal-today">اليوم</button>' +
+            '<button class="btn btn-outline btn-sm" id="cal-prev-month" title="الشهر التالي"><i class="fa-solid fa-chevron-right"></i></button>' +
+            '<select id="cal-month-select" style="padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); font-weight:700; font-size:0.9rem;">' + monthOpts + '</select>' +
+            '<button class="btn btn-outline btn-sm" id="cal-next-month" title="الشهر السابق"><i class="fa-solid fa-chevron-left"></i></button>' +
           '</div>' +
-          '<h3 id="cal-title" style="margin:0;font-size:1.2rem;"></h3>' +
           '<div class="calendar-nav">' +
-            '<button class="btn btn-outline btn-sm" id="cal-next"><i class="fa-solid fa-chevron-left"></i></button>' +
+            '<button class="btn btn-outline btn-sm" id="cal-prev-year" title="السنة التالية"><i class="fa-solid fa-forward"></i></button>' +
+            '<select id="cal-year-select" style="padding:6px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); font-weight:700; font-size:0.9rem; font-family:Inter,sans-serif;">' + yearOpts + '</select>' +
+            '<button class="btn btn-outline btn-sm" id="cal-next-year" title="السنة السابقة"><i class="fa-solid fa-backward"></i></button>' +
           '</div>' +
+          '<button class="btn-today" id="cal-today">📅 اليوم</button>' +
         '</div>' +
         '<div id="cal-grid"></div>' +
         '<div id="cal-summary" class="calendar-month-summary"></div>' +
@@ -1428,13 +1442,17 @@ async function renderVendorCalendar(container) {
       '</div>' +
     '</div>';
 
+  const monthSelect = document.getElementById('cal-month-select');
+  const yearSelect = document.getElementById('cal-year-select');
+  monthSelect.value = currentMonth;
+
   const drawCalendar = async () => {
+    monthSelect.value = currentMonth;
+    yearSelect.value = currentYear;
+
     const bookings = await window.db.getVendorBookings(currentUser.id);
-    const title = document.getElementById('cal-title');
     const grid = document.getElementById('cal-grid');
     const summary = document.getElementById('cal-summary');
-    const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-    title.textContent = months[currentMonth] + ' ' + currentYear;
 
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const firstDay = new Date(currentYear, currentMonth, 1).getDay();
@@ -1448,8 +1466,7 @@ async function renderVendorCalendar(container) {
       html += '<div class="calendar-day empty"></div>';
     }
 
-    let bookedCount = 0;
-    let freeCount = 0;
+    let bookedCount = 0, freeCount = 0;
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = currentYear + '-' + String(currentMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
@@ -1484,14 +1501,31 @@ async function renderVendorCalendar(container) {
     });
   };
 
-  document.getElementById('cal-prev').addEventListener('click', () => {
+  // Navigation events
+  document.getElementById('cal-prev-month').addEventListener('click', () => {
     currentMonth++;
     if (currentMonth > 11) { currentMonth = 0; currentYear++; }
     drawCalendar();
   });
-  document.getElementById('cal-next').addEventListener('click', () => {
+  document.getElementById('cal-next-month').addEventListener('click', () => {
     currentMonth--;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    drawCalendar();
+  });
+  document.getElementById('cal-prev-year').addEventListener('click', () => {
+    currentYear++;
+    drawCalendar();
+  });
+  document.getElementById('cal-next-year').addEventListener('click', () => {
+    currentYear--;
+    drawCalendar();
+  });
+  monthSelect.addEventListener('change', () => {
+    currentMonth = parseInt(monthSelect.value);
+    drawCalendar();
+  });
+  yearSelect.addEventListener('change', () => {
+    currentYear = parseInt(yearSelect.value);
     drawCalendar();
   });
   document.getElementById('cal-today').addEventListener('click', () => {
