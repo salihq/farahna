@@ -5,6 +5,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const { applySecurity } = require('./middleware/security');
 const seedDatabase = require('./seed');
@@ -24,6 +25,35 @@ app.use(express.urlencoded({ extended: true }));
 
 // ─── Static Files ────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// ─── Ensure DB Connection (critical for serverless) ─────────
+let dbPromise = null;
+function ensureDB() {
+  if (mongoose.connection.readyState === 1) return Promise.resolve();
+  if (!dbPromise) {
+    dbPromise = connectDB().then(async () => {
+      console.log('✅ MongoDB connected');
+      if (process.env.NODE_ENV !== 'production') {
+        await seedDatabase();
+      }
+    }).catch(err => {
+      console.error('❌ MongoDB connection error:', err.message);
+      dbPromise = null;
+      throw err;
+    });
+  }
+  return dbPromise;
+}
+
+// Wait for DB on every API request (serverless cold start protection)
+app.use('/api', async (req, res, next) => {
+  try {
+    await ensureDB();
+    next();
+  } catch (err) {
+    res.status(503).json({ error: 'خطأ في الاتصال بقاعدة البيانات. حاول مرة أخرى.' });
+  }
+});
 
 // ─── API Routes ──────────────────────────────────────────────
 app.use('/api/auth',          require('./routes/auth'));
@@ -51,27 +81,15 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: message });
 });
 
-// ─── Database & Serverless Setup ─────────────────────────────
-// Connect to DB asynchronously (essential for serverless environments)
-connectDB().then(async () => {
-  console.log('✅ MongoDB connected');
-  // Only seed the database in development or if specifically needed, 
-  // to avoid slowing down serverless cold starts.
-  if (process.env.NODE_ENV !== 'production') {
-    await seedDatabase();
-  }
-}).catch(err => {
-  console.error('❌ MongoDB connection error:', err.message);
-});
-
 // Export the app for Vercel Serverless Functions
 module.exports = app;
 
-// Only start the server if the file is executed directly (e.g., node server.js)
-// This ensures local development still works perfectly!
+// Only start the server if the file is executed directly
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`🚀 Farahna server running on port ${PORT}`);
-    console.log(`📍 http://localhost:${PORT}`);
+  ensureDB().then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Farahna server running on port ${PORT}`);
+      console.log(`📍 http://localhost:${PORT}`);
+    });
   });
 }

@@ -175,7 +175,7 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
       const conflicts = [];
       for (const vid of vendorIds) {
         const booking = await Booking.findOne({ vendorId: vid });
-        if (booking && booking.dates.some(d => d.dateStr === dateStr)) {
+        if (booking && booking.dates.includes(dateStr)) {
           const vendor = await User.findById(vid);
           conflicts.push(vendor ? vendor.name : vid);
         }
@@ -240,7 +240,7 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
       for (const vendor of vendors) {
         await Booking.findOneAndUpdate(
           { vendorId: vendor._id },
-          { $push: { dates: { dateStr, planId: plan._id, manualBlock: false } } },
+          { $addToSet: { dates: dateStr } },
           { upsert: true }
         );
 
@@ -300,7 +300,7 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
       const conflicts = [];
       for (const vid of plan.vendorIds) {
         const booking = await Booking.findOne({ vendorId: vid });
-        if (booking && booking.dates.some(d => d.dateStr === plan.dateStr)) {
+        if (booking && booking.dates.includes(plan.dateStr)) {
           const vendor = await User.findById(vid);
           conflicts.push(vendor ? vendor.name : vid);
         }
@@ -323,7 +323,7 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
       for (const vendor of vendors) {
         await Booking.findOneAndUpdate(
           { vendorId: vendor._id },
-          { $push: { dates: { dateStr: plan.dateStr, planId: plan._id, manualBlock: false } } },
+          { $addToSet: { dates: plan.dateStr } },
           { upsert: true }
         );
 
@@ -352,7 +352,7 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
       // Cancellation — remove dates from all vendors
       await Booking.updateMany(
         { vendorId: { $in: oldVendorIds } },
-        { $pull: { dates: { dateStr: oldDateStr } } }
+        { $pull: { dates: oldDateStr } }
       );
 
       const vendors = await User.find({ _id: { $in: oldVendorIds } }).select('-password');
