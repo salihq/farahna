@@ -15,9 +15,11 @@ window.Services.Pricing = {
       ? vendor.price * (guests || 1)
       : vendor.price;
 
-    // Add weekend surcharges
+    // Add surcharges based on date
     if (dateStr) {
       const dayOfWeek = new Date(dateStr).getDay(); // 0=Sun, 5=Fri, 6=Sat
+
+      // Weekend surcharges
       if (dayOfWeek === 5 && vendor.fridaySurcharge) {
         base += vendor.fridaySurcharge;
       }
@@ -25,11 +27,20 @@ window.Services.Pricing = {
         base += vendor.saturdaySurcharge;
       }
 
-      // Add specific date surcharge (stacks with weekend)
+      // Specific date surcharge
       if (vendor.specialPricing && vendor.specialPricing.length > 0) {
         const special = vendor.specialPricing.find(sp => sp.dateStr === dateStr);
         if (special && special.price) {
           base += special.price;
+        }
+      }
+
+      // Date-forward surcharges (from date X onward, add Y)
+      if (vendor.dateForwardPricing && vendor.dateForwardPricing.length > 0) {
+        for (const dfp of vendor.dateForwardPricing) {
+          if (dfp.fromDate && dfp.surcharge && dateStr >= dfp.fromDate) {
+            base += dfp.surcharge;
+          }
         }
       }
     }
@@ -240,6 +251,7 @@ window.Services.Validation = {
 
   validateBooking(cart) {
     const errors = [];
+    if (!cart.clientId) errors.push('يجب اختيار عميل للخطة');
     if (!cart.date) errors.push('يجب اختيار التاريخ');
     if (!cart.vendors || cart.vendors.length === 0) errors.push('يجب إضافة خدمة واحدة على الأقل');
     if (!cart.guests || cart.guests < 1) errors.push('عدد الحضور غير صحيح');

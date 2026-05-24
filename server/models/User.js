@@ -42,6 +42,11 @@ const userSchema = new mongoose.Schema({
     dateStr: String,
     price: Number
   }],
+  dateForwardPricing: [{
+    fromDate: String,
+    surcharge: Number,
+    label: String
+  }],
   fridaySurcharge: {
     type: Number,
     default: 0

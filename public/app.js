@@ -204,7 +204,7 @@ async function renderOrgPlan(container) {
   const services = await window.db.getServices();
   const clients = await window.db.getClients();
 
-  let clientOptions = '<option value="">بدون عميل (خطة حرة)</option>';
+  let clientOptions = '<option value="">— اختر عميلاً (مطلوب) —</option>';
   clients.forEach(c => {
     const sel = cart.clientId === c.id ? 'selected' : '';
     clientOptions += '<option value="' + c.id + '" ' + sel + '>' + c.name + (c.budget ? ' — ميزانية: ' + window.Services.Pricing.formatPrice(Number(c.budget)) : ' — مفتوحة') + '</option>';
@@ -448,7 +448,29 @@ async function renderOrgPlan(container) {
   };
 
   // ─── Event Listeners ──────────────────────────────────────
-  document.getElementById('plan-date').addEventListener('change', loadVendors);
+  document.getElementById('plan-date').addEventListener('change', async () => {
+    const newDate = document.getElementById('plan-date').value;
+    if (newDate && cart.vendors.length > 0) {
+      // Check if any vendor in cart is booked on the new date
+      const conflicts = [];
+      for (const v of cart.vendors) {
+        const bookings = await window.db.getVendorBookings(v.id);
+        if (bookings.includes(newDate)) {
+          conflicts.push(v);
+        }
+      }
+      if (conflicts.length > 0) {
+        const names = conflicts.map(v => v.name).join('، ');
+        const ok = await window.UI.confirm('⚠️ المزودون التالون محجوزون في التاريخ الجديد:\n\n' + names + '\n\nهل تريد إزالتهم من السلة؟');
+        if (ok) {
+          cart.vendors = cart.vendors.filter(v => !conflicts.find(c => c.id === v.id));
+          window.UI.toast('تم إزالة ' + conflicts.length + ' مزود محجوز من السلة', 'info');
+        }
+      }
+    }
+    updateCartUI();
+    loadVendors();
+  });
   document.getElementById('plan-guests').addEventListener('input', () => { updateCartUI(); loadVendors(); });
   document.getElementById('plan-client').addEventListener('change', (e) => {
     const client = clients.find(c => c.id === e.target.value);
@@ -1800,6 +1822,13 @@ async function renderVendorProfile(container) {
           '</div>' +
 
           '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
+            '<h3><i class="fa-solid fa-arrow-trend-up"></i> زيادة سعر من تاريخ معين فصاعداً</h3>' +
+            '<p class="text-sm text-muted mb-8">مبلغ إضافي يسري على كل حجز بدءاً من تاريخ محدد (مثال: زيادة موسمية). يتراكم مع باقي الزيادات.</p>' +
+            '<div id="forward-pricing-list" style="margin-top: 12px;"></div>' +
+            '<button type="button" class="btn btn-outline btn-sm mt-8" id="btn-add-forward-pricing"><i class="fa-solid fa-plus"></i> إضافة زيادة</button>' +
+          '</div>' +
+
+          '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
             '<h3><i class="fa-solid fa-calendar-week"></i> حجز سريع لعطلات نهاية الأسبوع</h3>' +
             '<p class="text-sm text-muted mb-8">حظر جميع أيام الجمعة والسبت في شهر معين</p>' +
             '<div class="form-row">' +
@@ -1822,6 +1851,7 @@ async function renderVendorProfile(container) {
 
   let contacts = [...(currentUser.contacts || [])];
   let specialPricing = [...(currentUser.specialPricing || [])];
+  let dateForwardPricing = [...(currentUser.dateForwardPricing || [])];
 
   const renderContacts = () => {
     const list = document.getElementById('contacts-list');
@@ -1849,9 +1879,24 @@ async function renderVendorProfile(container) {
 
   window._removeContact = (i) => { contacts.splice(i, 1); renderContacts(); };
   window._removePricing = (i) => { specialPricing.splice(i, 1); renderPricing(); };
+  window._removeForwardPricing = (i) => { dateForwardPricing.splice(i, 1); renderForwardPricing(); };
+
+  const renderForwardPricing = () => {
+    const list = document.getElementById('forward-pricing-list');
+    list.innerHTML = '';
+    dateForwardPricing.forEach((p, i) => {
+      list.innerHTML += '<div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">' +
+        '<input type="date" class="fp-date flex-1" value="' + (p.fromDate || '') + '">' +
+        '<input type="number" placeholder="المبلغ الإضافي" class="fp-val" style="width:120px;" value="' + (p.surcharge || 0) + '">' +
+        '<input type="text" placeholder="وصف (مثل: موسم)" class="fp-label flex-1" value="' + (p.label || '') + '">' +
+        '<button type="button" class="btn btn-danger btn-icon" onclick="window._removeForwardPricing(' + i + ')"><i class="fa-solid fa-trash"></i></button>' +
+      '</div>';
+    });
+  };
 
   document.getElementById('btn-add-contact').addEventListener('click', () => { contacts.push({ name: '', phone: '' }); renderContacts(); });
   document.getElementById('btn-add-pricing').addEventListener('click', () => { specialPricing.push({ dateStr: '', price: 0 }); renderPricing(); });
+  document.getElementById('btn-add-forward-pricing').addEventListener('click', () => { dateForwardPricing.push({ fromDate: '', surcharge: 0, label: '' }); renderForwardPricing(); });
 
   // Quick block weekends
   const blockDays = async (dayNums) => {
@@ -1878,6 +1923,7 @@ async function renderVendorProfile(container) {
 
   renderContacts();
   renderPricing();
+  renderForwardPricing();
 
   document.getElementById('profile-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1892,6 +1938,12 @@ async function renderVendorProfile(container) {
     const pVals = document.querySelectorAll('.p-val');
     specialPricing = Array.from(pDates).map((el, i) => ({ dateStr: el.value, price: parseInt(pVals[i].value) || 0 })).filter(p => p.dateStr && p.price > 0);
 
+    // Update forward pricing from DOM
+    const fpDates = document.querySelectorAll('.fp-date');
+    const fpVals = document.querySelectorAll('.fp-val');
+    const fpLabels = document.querySelectorAll('.fp-label');
+    dateForwardPricing = Array.from(fpDates).map((el, i) => ({ fromDate: el.value, surcharge: parseInt(fpVals[i].value) || 0, label: fpLabels[i].value })).filter(p => p.fromDate && p.surcharge > 0);
+
     currentUser.phone = document.getElementById('p-phone').value.trim();
     currentUser.location = document.getElementById('p-location').value.trim();
     currentUser.price = parseInt(document.getElementById('p-price').value) || 0;
@@ -1900,6 +1952,7 @@ async function renderVendorProfile(container) {
     currentUser.description = document.getElementById('p-desc').value.trim();
     currentUser.contacts = contacts;
     currentUser.specialPricing = specialPricing;
+    currentUser.dateForwardPricing = dateForwardPricing;
     currentUser.fridaySurcharge = parseInt(document.getElementById('p-fri-surcharge').value) || 0;
     currentUser.saturdaySurcharge = parseInt(document.getElementById('p-sat-surcharge').value) || 0;
     
