@@ -51,23 +51,27 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: message });
 });
 
-// ─── Start ───────────────────────────────────────────────────
-async function start() {
-  try {
-    await connectDB();
-    console.log('✅ MongoDB connected');
-
+// ─── Database & Serverless Setup ─────────────────────────────
+// Connect to DB asynchronously (essential for serverless environments)
+connectDB().then(async () => {
+  console.log('✅ MongoDB connected');
+  // Only seed the database in development or if specifically needed, 
+  // to avoid slowing down serverless cold starts.
+  if (process.env.NODE_ENV !== 'production') {
     await seedDatabase();
-
-    app.listen(PORT, () => {
-      console.log(`🚀 Farahna server running on port ${PORT}`);
-      console.log(`📍 http://localhost:${PORT}`);
-    });
-  } catch (err) {
-    console.error('❌ Failed to start server:', err.message);
-    console.error('Stack:', err.stack);
-    process.exit(1);
   }
-}
+}).catch(err => {
+  console.error('❌ MongoDB connection error:', err.message);
+});
 
-start();
+// Export the app for Vercel Serverless Functions
+module.exports = app;
+
+// Only start the server if the file is executed directly (e.g., node server.js)
+// This ensures local development still works perfectly!
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Farahna server running on port ${PORT}`);
+    console.log(`📍 http://localhost:${PORT}`);
+  });
+}

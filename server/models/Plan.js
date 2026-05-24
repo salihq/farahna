@@ -35,6 +35,15 @@ const planSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  bookedBy: {
+    name: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    source: {
+      type: String,
+      enum: ['website', 'external', 'organizer'],
+      default: 'website'
+    }
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -171,7 +171,12 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
       vendorIds,
       guests: guests || 0,
       totalCost,
-      status: planStatus
+      status: planStatus,
+      bookedBy: req.body.bookedBy || {
+        name: '',
+        phone: '',
+        source: 'website'
+      }
     });
 
     // If confirmed, notify vendors and update client
@@ -225,6 +230,7 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
 
     const wasDraft = oldPlan.status === 'draft';
     const isNowConfirmed = req.body.status === 'confirmed';
+    const isNowCancelled = req.body.status === 'cancelled';
 
     Object.assign(oldPlan, req.body);
     const plan = await oldPlan.save();
@@ -259,6 +265,34 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
       await ActivityLog.create({
         type: 'plan',
         message: 'تم تأكيد الحجز بتاريخ ' + plan.dateStr + ' لـ ' + plan.clientName
+      });
+    } else if (!wasDraft && oldPlan.status !== 'cancelled' && isNowCancelled) {
+      // Logic for cancellation
+      const vendors = await User.find({ _id: { $in: plan.vendorIds } }).select('-password');
+      for (const vendor of vendors) {
+        // Remove date from vendor's calendar
+        await Booking.findOneAndUpdate(
+          { vendorId: vendor._id },
+          { $pull: { dates: plan.dateStr } }
+        );
+
+        await Notification.create({
+          vendorId: vendor._id,
+          message: `تم إلغاء الحجز لتاريخ ${plan.dateStr}`,
+          details: {
+            planId: plan._id.toString(),
+            clientName: plan.clientName,
+            organizerName: req.user.name,
+            date: plan.dateStr,
+            guests: plan.guests
+          },
+          read: false
+        });
+      }
+      
+      await ActivityLog.create({
+        type: 'plan',
+        message: 'تم إلغاء الحجز بتاريخ ' + plan.dateStr + ' لـ ' + plan.clientName
       });
     }
 
