@@ -1250,16 +1250,19 @@ function renderOrgSettings(container) {
     const ok = await window.UI.confirm('⚠️ هل أنت متأكد؟ سيتم حذف جميع البيانات وإعادة زرع بيانات تجريبية!');
     if (!ok) return;
     try {
-      const token = localStorage.getItem('token');
+      const btn = document.getElementById('btn-reset-db');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري إعادة التعيين...';
       const resp = await fetch('/api/auth/reset-db', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'admin', password: 'admin' })
       });
       const data = await resp.json();
-      if (data.error) { window.UI.toast(data.error, 'error'); return; }
-      window.UI.toast('تم إعادة التعيين. جاري إعادة التحميل...', 'success');
+      if (data.error) { window.UI.toast(data.error, 'error'); btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-rotate-left"></i> إعادة تعيين'; return; }
+      window.UI.toast('تم إعادة التعيين بنجاح! جاري إعادة التحميل...', 'success');
       localStorage.removeItem('token');
-      setTimeout(() => location.reload(), 1500);
+      setTimeout(() => location.reload(), 2000);
     } catch (err) {
       window.UI.toast('حدث خطأ أثناء إعادة التعيين', 'error');
     }
