@@ -1822,8 +1822,8 @@ async function renderVendorProfile(container) {
           '</div>' +
 
           '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
-            '<h3><i class="fa-solid fa-arrow-trend-up"></i> زيادة سعر من تاريخ معين فصاعداً</h3>' +
-            '<p class="text-sm text-muted mb-8">مبلغ إضافي يسري على كل حجز بدءاً من تاريخ محدد (مثال: زيادة موسمية). يتراكم مع باقي الزيادات.</p>' +
+            '<h3><i class="fa-solid fa-arrow-trend-up"></i> زيادة سعر لفترة محددة</h3>' +
+            '<p class="text-sm text-muted mb-8">مبلغ إضافي يسري من تاريخ إلى تاريخ (مثال: من 1/5 حتى 1/7 زيادة موسم). اتركِ "حتى" فارغاً ليكون مفتوحاً. يتراكم مع باقي الزيادات.</p>' +
             '<div id="forward-pricing-list" style="margin-top: 12px;"></div>' +
             '<button type="button" class="btn btn-outline btn-sm mt-8" id="btn-add-forward-pricing"><i class="fa-solid fa-plus"></i> إضافة زيادة</button>' +
           '</div>' +
@@ -1885,10 +1885,13 @@ async function renderVendorProfile(container) {
     const list = document.getElementById('forward-pricing-list');
     list.innerHTML = '';
     dateForwardPricing.forEach((p, i) => {
-      list.innerHTML += '<div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">' +
-        '<input type="date" class="fp-date flex-1" value="' + (p.fromDate || '') + '">' +
-        '<input type="number" placeholder="المبلغ الإضافي" class="fp-val" style="width:120px;" value="' + (p.surcharge || 0) + '">' +
-        '<input type="text" placeholder="وصف (مثل: موسم)" class="fp-label flex-1" value="' + (p.label || '') + '">' +
+      list.innerHTML += '<div style="display:flex; gap:6px; margin-bottom:8px; align-items:center; flex-wrap:wrap;">' +
+        '<span class="text-sm" style="white-space:nowrap;">من</span>' +
+        '<input type="date" class="fp-from" style="flex:1; min-width:130px;" value="' + (p.fromDate || '') + '">' +
+        '<span class="text-sm" style="white-space:nowrap;">حتى</span>' +
+        '<input type="date" class="fp-to" style="flex:1; min-width:130px;" value="' + (p.toDate || '') + '" placeholder="مفتوح">' +
+        '<input type="number" placeholder="الزيادة" class="fp-val" style="width:100px;" value="' + (p.surcharge || 0) + '">' +
+        '<input type="text" placeholder="وصف" class="fp-label" style="flex:1; min-width:100px;" value="' + (p.label || '') + '">' +
         '<button type="button" class="btn btn-danger btn-icon" onclick="window._removeForwardPricing(' + i + ')"><i class="fa-solid fa-trash"></i></button>' +
       '</div>';
     });
@@ -1896,7 +1899,7 @@ async function renderVendorProfile(container) {
 
   document.getElementById('btn-add-contact').addEventListener('click', () => { contacts.push({ name: '', phone: '' }); renderContacts(); });
   document.getElementById('btn-add-pricing').addEventListener('click', () => { specialPricing.push({ dateStr: '', price: 0 }); renderPricing(); });
-  document.getElementById('btn-add-forward-pricing').addEventListener('click', () => { dateForwardPricing.push({ fromDate: '', surcharge: 0, label: '' }); renderForwardPricing(); });
+  document.getElementById('btn-add-forward-pricing').addEventListener('click', () => { dateForwardPricing.push({ fromDate: '', toDate: '', surcharge: 0, label: '' }); renderForwardPricing(); });
 
   // Quick block weekends
   const blockDays = async (dayNums) => {
@@ -1939,10 +1942,11 @@ async function renderVendorProfile(container) {
     specialPricing = Array.from(pDates).map((el, i) => ({ dateStr: el.value, price: parseInt(pVals[i].value) || 0 })).filter(p => p.dateStr && p.price > 0);
 
     // Update forward pricing from DOM
-    const fpDates = document.querySelectorAll('.fp-date');
+    const fpFroms = document.querySelectorAll('.fp-from');
+    const fpTos = document.querySelectorAll('.fp-to');
     const fpVals = document.querySelectorAll('.fp-val');
     const fpLabels = document.querySelectorAll('.fp-label');
-    dateForwardPricing = Array.from(fpDates).map((el, i) => ({ fromDate: el.value, surcharge: parseInt(fpVals[i].value) || 0, label: fpLabels[i].value })).filter(p => p.fromDate && p.surcharge > 0);
+    dateForwardPricing = Array.from(fpFroms).map((el, i) => ({ fromDate: el.value, toDate: fpTos[i].value, surcharge: parseInt(fpVals[i].value) || 0, label: fpLabels[i].value })).filter(p => p.fromDate && p.surcharge > 0);
 
     currentUser.phone = document.getElementById('p-phone').value.trim();
     currentUser.location = document.getElementById('p-location').value.trim();

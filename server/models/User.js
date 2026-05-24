@@ -44,6 +44,7 @@ const userSchema = new mongoose.Schema({
   }],
   dateForwardPricing: [{
     fromDate: String,
+    toDate: String,
     surcharge: Number,
     label: String
   }],

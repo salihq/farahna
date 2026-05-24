@@ -35,11 +35,14 @@ window.Services.Pricing = {
         }
       }
 
-      // Date-forward surcharges (from date X onward, add Y)
+      // Date-range surcharges (from date X to date Y, add Z)
       if (vendor.dateForwardPricing && vendor.dateForwardPricing.length > 0) {
         for (const dfp of vendor.dateForwardPricing) {
           if (dfp.fromDate && dfp.surcharge && dateStr >= dfp.fromDate) {
-            base += dfp.surcharge;
+            // If toDate is set, only apply within range
+            if (!dfp.toDate || dateStr <= dfp.toDate) {
+              base += dfp.surcharge;
+            }
           }
         }
       }
