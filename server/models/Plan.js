@@ -37,12 +37,35 @@ const planSchema = new mongoose.Schema({
   },
   bookedBy: {
     name: { type: String, default: '' },
-    phone: { type: String, default: '' },
+    contacts: [{
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      role: { type: String, default: '' }
+    }],
     source: {
       type: String,
       enum: ['website', 'external', 'organizer'],
       default: 'website'
-    }
+    },
+    notes: { type: String, default: '' }
+  },
+  eventType: {
+    type: String,
+    enum: ['زفاف', 'خطوبة', 'عقد قران', 'حفل تخرج', 'أخرى'],
+    default: 'زفاف'
+  },
+  eventTime: {
+    type: String,
+    enum: ['مسائي', 'صباحي'],
+    default: 'مسائي'
+  },
+  venue: {
+    type: String,
+    default: ''
+  },
+  specialRequests: {
+    type: String,
+    default: ''
   },
   createdAt: {
     type: Date,

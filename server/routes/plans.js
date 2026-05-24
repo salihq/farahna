@@ -60,6 +60,15 @@ router.get('/:id/export', async (req, res) => {
       return sum + (v.price || 0);
     }, 0);
 
+    // Build contacts HTML
+    const contactsHtml = (plan.bookedBy && plan.bookedBy.contacts && plan.bookedBy.contacts.length > 0)
+      ? plan.bookedBy.contacts.map(c =>
+          `<div class="info-row" style="margin-right:20px;">
+            <span class="label">${c.role || 'جهة اتصال'}:</span> ${c.name || '—'} — ${c.phone || '—'}
+          </div>`
+        ).join('')
+      : '';
+
     const html = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -88,8 +97,25 @@ router.get('/:id/export', async (req, res) => {
     <div class="info-row"><span class="label">البريد:</span> ${clientInfo.email || '—'}</div>
   ` : '<p>لا توجد بيانات عميل</p>'}
 
-  <div class="info-row"><span class="label">التاريخ:</span> ${plan.date || '—'}</div>
+  <h2>تفاصيل المناسبة</h2>
+  <div class="info-row"><span class="label">نوع المناسبة:</span> ${plan.eventType || '—'}</div>
+  <div class="info-row"><span class="label">التاريخ:</span> ${plan.dateStr || '—'}</div>
+  <div class="info-row"><span class="label">الوقت:</span> ${plan.eventTime || '—'}</div>
+  <div class="info-row"><span class="label">المكان:</span> ${plan.venue || '—'}</div>
   <div class="info-row"><span class="label">عدد الضيوف:</span> ${plan.guests || '—'}</div>
+
+  ${plan.bookedBy && plan.bookedBy.name ? `
+  <h2>معلومات الحجز</h2>
+  <div class="info-row"><span class="label">الحاجز:</span> ${plan.bookedBy.name}</div>
+  <div class="info-row"><span class="label">المصدر:</span> ${plan.bookedBy.source || '—'}</div>
+  ${contactsHtml}
+  ${plan.bookedBy.notes ? `<div class="info-row"><span class="label">ملاحظات:</span> ${plan.bookedBy.notes}</div>` : ''}
+  ` : ''}
+
+  ${plan.specialRequests ? `
+  <h2>طلبات خاصة</h2>
+  <p>${plan.specialRequests}</p>
+  ` : ''}
 
   <h2>المزوّدون</h2>
   <table>
@@ -133,10 +159,33 @@ router.get('/:id/export', async (req, res) => {
 // ─── POST /reserve — Create a reservation plan (organizer) ──
 router.post('/reserve', requireRole('organizer'), async (req, res) => {
   try {
-    const { clientId, dateStr, vendorIds, guests, organizerName, name, status } = req.body;
+    const {
+      clientId, dateStr, vendorIds, guests, organizerName, name, status,
+      eventType, eventTime, venue, specialRequests
+    } = req.body;
 
     if (!dateStr || !vendorIds || !Array.isArray(vendorIds) || vendorIds.length === 0) {
       return res.status(400).json({ error: 'التاريخ والمزوّدون مطلوبون' });
+    }
+
+    const planStatus = status || 'confirmed';
+
+    // Check availability for all vendors before proceeding
+    if (planStatus === 'confirmed') {
+      const conflicts = [];
+      for (const vid of vendorIds) {
+        const booking = await Booking.findOne({ vendorId: vid });
+        if (booking && booking.dates.some(d => d.dateStr === dateStr)) {
+          const vendor = await User.findById(vid);
+          conflicts.push(vendor ? vendor.name : vid);
+        }
+      }
+      if (conflicts.length > 0) {
+        return res.status(409).json({
+          error: 'بعض المزودين محجوزون في هذا التاريخ: ' + conflicts.join('، '),
+          conflicts
+        });
+      }
     }
 
     // Fetch vendors to calculate total cost
@@ -160,8 +209,6 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
       if (client) clientName = client.name;
     }
 
-    const planStatus = status || 'confirmed';
-
     // Create the plan
     const plan = await Plan.create({
       clientId: clientId || null,
@@ -174,9 +221,14 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
       status: planStatus,
       bookedBy: req.body.bookedBy || {
         name: '',
-        phone: '',
-        source: 'website'
-      }
+        contacts: [],
+        source: 'website',
+        notes: ''
+      },
+      eventType: eventType || 'زفاف',
+      eventTime: eventTime || 'مسائي',
+      venue: venue || '',
+      specialRequests: specialRequests || ''
     });
 
     // If confirmed, notify vendors and update client
@@ -188,7 +240,7 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
       for (const vendor of vendors) {
         await Booking.findOneAndUpdate(
           { vendorId: vendor._id },
-          { $addToSet: { dates: dateStr } },
+          { $push: { dates: { dateStr, planId: plan._id, manualBlock: false } } },
           { upsert: true }
         );
 
@@ -200,7 +252,10 @@ router.post('/reserve', requireRole('organizer'), async (req, res) => {
             clientName,
             organizerName: organizerName || req.user.name,
             date: dateStr,
-            guests
+            guests,
+            eventType: plan.eventType,
+            venue: plan.venue,
+            eventTime: plan.eventTime
           },
           read: false
         });
@@ -229,13 +284,37 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
     }
 
     const wasDraft = oldPlan.status === 'draft';
+    const wasConfirmed = oldPlan.status === 'confirmed';
     const isNowConfirmed = req.body.status === 'confirmed';
     const isNowCancelled = req.body.status === 'cancelled';
+
+    // Preserve the old dateStr before overwriting for cancellation logic
+    const oldDateStr = oldPlan.dateStr;
+    const oldVendorIds = [...oldPlan.vendorIds];
 
     Object.assign(oldPlan, req.body);
     const plan = await oldPlan.save();
 
     if (wasDraft && isNowConfirmed) {
+      // Conflict check before confirming
+      const conflicts = [];
+      for (const vid of plan.vendorIds) {
+        const booking = await Booking.findOne({ vendorId: vid });
+        if (booking && booking.dates.some(d => d.dateStr === plan.dateStr)) {
+          const vendor = await User.findById(vid);
+          conflicts.push(vendor ? vendor.name : vid);
+        }
+      }
+      if (conflicts.length > 0) {
+        // Revert status back to draft
+        plan.status = 'draft';
+        await plan.save();
+        return res.status(409).json({
+          error: 'بعض المزودين محجوزون في هذا التاريخ: ' + conflicts.join('، '),
+          conflicts
+        });
+      }
+
       if (plan.clientId) {
         await Client.findByIdAndUpdate(plan.clientId, { status: 'booked' });
       }
@@ -244,7 +323,7 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
       for (const vendor of vendors) {
         await Booking.findOneAndUpdate(
           { vendorId: vendor._id },
-          { $addToSet: { dates: plan.dateStr } },
+          { $push: { dates: { dateStr: plan.dateStr, planId: plan._id, manualBlock: false } } },
           { upsert: true }
         );
 
@@ -256,7 +335,10 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
             clientName: plan.clientName,
             organizerName: req.user.name,
             date: plan.dateStr,
-            guests: plan.guests
+            guests: plan.guests,
+            eventType: plan.eventType,
+            venue: plan.venue,
+            eventTime: plan.eventTime
           },
           read: false
         });
@@ -266,24 +348,23 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
         type: 'plan',
         message: 'تم تأكيد الحجز بتاريخ ' + plan.dateStr + ' لـ ' + plan.clientName
       });
-    } else if (!wasDraft && oldPlan.status !== 'cancelled' && isNowCancelled) {
-      // Logic for cancellation
-      const vendors = await User.find({ _id: { $in: plan.vendorIds } }).select('-password');
-      for (const vendor of vendors) {
-        // Remove date from vendor's calendar
-        await Booking.findOneAndUpdate(
-          { vendorId: vendor._id },
-          { $pull: { dates: plan.dateStr } }
-        );
+    } else if (isNowCancelled && !wasDraft) {
+      // Cancellation — remove dates from all vendors
+      await Booking.updateMany(
+        { vendorId: { $in: oldVendorIds } },
+        { $pull: { dates: { dateStr: oldDateStr } } }
+      );
 
+      const vendors = await User.find({ _id: { $in: oldVendorIds } }).select('-password');
+      for (const vendor of vendors) {
         await Notification.create({
           vendorId: vendor._id,
-          message: `تم إلغاء الحجز لتاريخ ${plan.dateStr}`,
+          message: `تم إلغاء الحجز لتاريخ ${oldDateStr}`,
           details: {
             planId: plan._id.toString(),
             clientName: plan.clientName,
             organizerName: req.user.name,
-            date: plan.dateStr,
+            date: oldDateStr,
             guests: plan.guests
           },
           read: false
@@ -292,7 +373,7 @@ router.put('/:id', requireRole('organizer'), async (req, res) => {
       
       await ActivityLog.create({
         type: 'plan',
-        message: 'تم إلغاء الحجز بتاريخ ' + plan.dateStr + ' لـ ' + plan.clientName
+        message: 'تم إلغاء الحجز بتاريخ ' + oldDateStr + ' لـ ' + plan.clientName
       });
     }
 

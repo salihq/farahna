@@ -396,3 +396,143 @@ window.UI.comparisonTable = function(vendors, services, guests) {
     '<tbody>' + bodyRows + '</tbody>' +
   '</table>';
 };
+
+// ═══════════════════════════════════════════════════════════════
+// SKELETON LOADING COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+
+window.UI.skeleton = function(type, count) {
+  count = count || 1;
+  var html = '';
+  for (var i = 0; i < count; i++) {
+    switch (type) {
+      case 'card':
+        html += '<div class="skeleton skeleton-card"></div>';
+        break;
+      case 'row':
+        html += '<div class="skeleton skeleton-row"></div>';
+        break;
+      case 'stat':
+        html += '<div class="skeleton skeleton-stat"></div>';
+        break;
+      default:
+        html += '<div class="skeleton skeleton-card"></div>';
+    }
+  }
+  return html;
+};
+
+window.UI.skeletonGrid = function(count) {
+  count = count || 6;
+  var html = '<div class="grid">';
+  for (var i = 0; i < count; i++) {
+    html += '<div class="skeleton skeleton-card"></div>';
+  }
+  return html + '</div>';
+};
+
+window.UI.skeletonTable = function(rows) {
+  rows = rows || 5;
+  var html = '';
+  for (var i = 0; i < rows; i++) {
+    html += '<div class="skeleton skeleton-row"></div>';
+  }
+  return html;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CONTACTS LIST COMPONENT
+// ═══════════════════════════════════════════════════════════════
+
+window.UI.contactsList = function(contacts) {
+  if (!contacts || contacts.length === 0) return '<span class="text-muted">-</span>';
+  var html = '';
+  contacts.forEach(function(c) {
+    html += '<div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">' +
+      '<i class="fa-solid fa-user-tag" style="color:var(--primary); font-size:0.8rem;"></i>' +
+      '<span style="font-weight:600;">' + (c.name || '') + '</span>' +
+      (c.role ? '<span class="badge badge-info" style="font-size:0.7rem;">' + c.role + '</span>' : '') +
+      (c.phone ? '<span class="text-muted text-sm" style="direction:ltr;font-family:Inter,sans-serif;"><i class="fa-solid fa-phone" style="font-size:0.7rem;margin-left:4px;"></i> ' + c.phone + '</span>' : '') +
+    '</div>';
+  });
+  return html;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// EVENT TYPE BADGE
+// ═══════════════════════════════════════════════════════════════
+
+window.UI.eventTypeBadge = function(eventType) {
+  var icons = {
+    'زفاف': 'fa-rings-wedding',
+    'خطوبة': 'fa-ring',
+    'عقد قران': 'fa-scroll',
+    'حفل تخرج': 'fa-graduation-cap',
+    'أخرى': 'fa-calendar-star'
+  };
+  var icon = icons[eventType] || 'fa-calendar-star';
+  return '<span class="event-type-badge"><i class="fa-solid ' + icon + '"></i> ' + (eventType || 'زفاف') + '</span>';
+};
+
+// ═══════════════════════════════════════════════════════════════
+// RESERVATION DETAIL CARD
+// ═══════════════════════════════════════════════════════════════
+
+window.UI.reservationDetailCard = function(plan, vendors, services) {
+  vendors = vendors || [];
+  services = services || [];
+
+  // Event info section
+  var eventSection = '<div class="detail-section">' +
+    '<h4><i class="fa-solid fa-champagne-glasses"></i> تفاصيل المناسبة</h4>' +
+    '<div class="detail-row"><span class="detail-label">اسم الخطة</span><span class="detail-value">' + (plan.name || '-') + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">نوع المناسبة</span><span class="detail-value">' + window.UI.eventTypeBadge(plan.eventType) + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">التاريخ</span><span class="detail-value" style="font-family:Inter,sans-serif;">' + (plan.dateStr || '-') + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">الوقت</span><span class="detail-value">' + (plan.eventTime === 'صباحي' ? '<i class="fa-solid fa-sun"></i> صباحي' : '<i class="fa-solid fa-moon"></i> مسائي') + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">عدد الضيوف</span><span class="detail-value" style="font-family:Inter,sans-serif;">' + (plan.guests || '-') + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">المكان</span><span class="detail-value">' + (plan.venue || '-') + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">الحالة</span><span class="detail-value">' + window.UI.statusBadge(plan.status) + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">التكلفة</span><span class="detail-value" style="font-family:Inter,sans-serif;font-weight:800;color:var(--primary);">' + (plan.totalCost ? plan.totalCost.toLocaleString() + ' ر.س' : '-') + '</span></div>' +
+  '</div>';
+
+  // Booking info section
+  var bookedBy = plan.bookedBy || {};
+  var bookingSection = '<div class="detail-section">' +
+    '<h4><i class="fa-solid fa-user-check"></i> معلومات الحاجز</h4>' +
+    '<div class="detail-row"><span class="detail-label">اسم الحاجز</span><span class="detail-value">' + (bookedBy.name || '-') + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">المصدر</span><span class="detail-value">' + window.UI.badge(bookedBy.source === 'website' ? 'الموقع' : (bookedBy.source === 'organizer' ? 'منظم' : 'خارجي'), bookedBy.source === 'website' ? 'info' : (bookedBy.source === 'organizer' ? 'success' : 'warning')) + '</span></div>' +
+    '<div class="detail-row"><span class="detail-label">العميل</span><span class="detail-value">' + (plan.clientName || '-') + '</span></div>' +
+    '<div style="margin-top:12px;"><strong style="font-size:0.85rem;">جهات الاتصال:</strong>' +
+    '<div style="margin-top:8px;">' + window.UI.contactsList(bookedBy.contacts) + '</div></div>' +
+    (bookedBy.notes ? '<div style="margin-top:12px;padding:10px;background:var(--warning-light);border-radius:var(--radius-sm);font-size:0.85rem;"><i class="fa-solid fa-note-sticky" style="color:var(--warning);margin-left:6px;"></i>' + bookedBy.notes + '</div>' : '') +
+  '</div>';
+
+  // Vendors section
+  var vendorPlanIds = plan.vendorIds || [];
+  var vendorCards = '';
+  vendors.forEach(function(v) {
+    if (vendorPlanIds.indexOf(v._id || v.id) === -1) return;
+    var svc = services.find(function(s) { return s._id === v.serviceId || s.id === v.serviceId; });
+    vendorCards += '<div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);">' +
+      '<div style="width:40px;height:40px;border-radius:50%;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;"><i class="fa-solid ' + (svc ? svc.icon : 'fa-star') + '" style="color:var(--primary);"></i></div>' +
+      '<div style="flex:1;"><div style="font-weight:700;">' + v.name + '</div><div class="text-sm text-muted">' + (svc ? svc.name : '-') + '</div></div>' +
+      '<div style="font-family:Inter,sans-serif;font-weight:700;color:var(--primary);">' + (v.price || 0).toLocaleString() + ' ر.س</div>' +
+    '</div>';
+  });
+
+  var vendorSection = '<div class="detail-section" style="grid-column:1/-1;">' +
+    '<h4><i class="fa-solid fa-store"></i> المزودون (' + vendorPlanIds.length + ')</h4>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;">' + (vendorCards || '<p class="text-muted">لا يوجد مزودون</p>') + '</div>' +
+  '</div>';
+
+  // Special requests
+  var requestsSection = '';
+  if (plan.specialRequests) {
+    requestsSection = '<div class="detail-section" style="grid-column:1/-1;">' +
+      '<h4><i class="fa-solid fa-clipboard-list"></i> طلبات خاصة</h4>' +
+      '<p style="font-size:0.9rem;line-height:1.8;">' + plan.specialRequests + '</p>' +
+    '</div>';
+  }
+
+  return '<div class="reservation-detail">' + eventSection + bookingSection + vendorSection + requestsSection + '</div>';
+};

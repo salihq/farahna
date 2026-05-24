@@ -20,7 +20,7 @@ router.get('/available/search', async (req, res) => {
 
     // If date is provided, exclude booked vendors
     if (date) {
-      const bookedEntries = await Booking.find({ dates: date });
+      const bookedEntries = await Booking.find({ 'dates.dateStr': date });
       const bookedVendorIds = bookedEntries.map(b => b.vendorId.toString());
       if (bookedVendorIds.length > 0) {
         vendorQuery._id = { $nin: bookedVendorIds };
@@ -42,7 +42,7 @@ router.get('/:vendorId', async (req, res) => {
       return res.json({ dates: [] });
     }
     const booking = await Booking.findOne({ vendorId: req.params.vendorId });
-    res.json({ dates: booking ? booking.dates : [] });
+    res.json({ dates: booking ? booking.dates.map(d => d.dateStr) : [] });
   } catch (err) {
     console.error('Get booking dates error:', err.message);
     res.status(500).json({ error: 'حدث خطأ في الخادم' });
@@ -72,17 +72,24 @@ router.post('/:vendorId/toggle', async (req, res) => {
       booking = await Booking.create({ vendorId, dates: [] });
     }
 
-    const dateIndex = booking.dates.indexOf(dateStr);
-    if (dateIndex > -1) {
-      // Remove the date
-      booking.dates.splice(dateIndex, 1);
+    const existingDate = booking.dates.find(d => d.dateStr === dateStr);
+
+    if (existingDate) {
+      // Date exists — check if it's booked by a plan
+      if (existingDate.planId) {
+        return res.status(409).json({
+          error: 'هذا التاريخ محجوز بواسطة خطة ولا يمكن تغييره يدوياً. يجب إلغاء الخطة أولاً.'
+        });
+      }
+      // Manual block — remove it (unblock)
+      booking.dates = booking.dates.filter(d => d.dateStr !== dateStr);
     } else {
-      // Add the date
-      booking.dates.push(dateStr);
+      // Date doesn't exist — add as manual block
+      booking.dates.push({ dateStr, planId: null, manualBlock: true });
     }
 
     await booking.save();
-    res.json({ dates: booking.dates });
+    res.json({ dates: booking.dates.map(d => d.dateStr) });
   } catch (err) {
     console.error('Toggle booking date error:', err.message);
     res.status(500).json({ error: 'حدث خطأ في الخادم' });

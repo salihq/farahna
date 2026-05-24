@@ -99,7 +99,15 @@ body {
   flex-direction: column;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background-color var(--transition), color var(--transition);
+}
+
+/* Numbers & data use Inter for clarity */
+.stat-value, .stat-widget h3, .progress-label,
+table td:first-child, .calendar-day span:first-child,
+.badge, .cart-total, .budget-info {
+  font-family: 'Inter', 'Cairo', sans-serif;
 }
 
 a { text-decoration: none; color: inherit; }
@@ -762,39 +770,154 @@ input, select, textarea, button { font-family: inherit; }
   font-size: 0.95rem;
   font-weight: 700;
   gap: 2px;
+  position: relative;
+  overflow: hidden;
+  min-height: 56px;
+}
+
+.calendar-day::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--primary-glow);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  border-radius: inherit;
+}
+
+.calendar-day:hover::after {
+  opacity: 1;
 }
 
 .calendar-day:hover {
   border-color: var(--primary);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+
+.calendar-day:active {
+  transform: scale(0.95);
 }
 
 .calendar-day .day-label {
   font-size: 0.65rem;
   font-weight: 600;
+  position: relative;
+  z-index: 1;
+}
+
+.calendar-day > span:first-child {
+  position: relative;
+  z-index: 1;
 }
 
 .calendar-day.booked {
   background: linear-gradient(135deg, var(--danger), #f87171);
   color: #fff;
   border-color: transparent;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
+
+.calendar-day.booked::after { display: none; }
+
+.calendar-day.manual-block {
+  background: linear-gradient(135deg, var(--warning), #fbbf24);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.calendar-day.manual-block::after { display: none; }
 
 .calendar-day.free {
   background: linear-gradient(135deg, var(--success), #34d399);
   color: #fff;
   border-color: transparent;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
 }
+
+.calendar-day.free::after { display: none; }
 
 .calendar-day.today {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-glow);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+  animation: todayPulse 2s ease-in-out infinite;
+}
+
+@keyframes todayPulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--primary-glow); }
+  50% { box-shadow: 0 0 0 6px var(--primary-glow); }
 }
 
 .calendar-day.empty {
   background: transparent;
   border-color: transparent;
   cursor: default;
+}
+
+.calendar-day.empty::after { display: none; }
+.calendar-day.empty:hover { transform: none; box-shadow: none; }
+
+.calendar-month-summary {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  margin-top: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.calendar-month-summary .summary-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-legend {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 16px;
+  font-size: 0.85rem;
+}
+
+.calendar-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-legend .legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-nav .btn-today {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  border-radius: var(--radius-full);
+  background: var(--primary-glow);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.calendar-nav .btn-today:hover {
+  background: var(--primary);
+  color: #fff;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1472,6 +1595,10 @@ input, select, textarea, button { font-family: inherit; }
   100% { background-position: 200% 0; }
 }
 
+@keyframes ripple {
+  to { transform: scale(4); opacity: 0; }
+}
+
 .animate-in { animation: slideUp 0.4s ease; }
 
 /* Staggered card animation */
@@ -1484,6 +1611,15 @@ input, select, textarea, button { font-family: inherit; }
 
 .grid > .card {
   animation: slideUp 0.4s ease both;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1654,3 +1790,256 @@ input, select, textarea, button { font-family: inherit; }
 .w-full { width: 100%; }
 .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SKELETON LOADING
+   ═══════════════════════════════════════════════════════════════ */
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-alt) 25%, var(--surface) 50%, var(--bg-alt) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-card {
+  height: 200px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+}
+
+.skeleton-row {
+  height: 52px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.skeleton-stat {
+  height: 100px;
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-text {
+  height: 14px;
+  width: 80%;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.skeleton-text.short {
+  width: 50%;
+}
+
+.skeleton-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ENHANCED DATA TABLES
+   ═══════════════════════════════════════════════════════════════ */
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--surface);
+  backdrop-filter: blur(8px);
+}
+
+.data-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: var(--bg-alt);
+}
+
+.data-table tbody tr:hover {
+  background: var(--primary-glow);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CONTACTS LIST
+   ═══════════════════════════════════════════════════════════════ */
+
+.contacts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  transition: all var(--transition-fast);
+}
+
+.contact-row:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-xs);
+}
+
+.contact-row input, .contact-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  font-size: 0.85rem;
+}
+
+.contact-row .btn-remove-contact {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  transition: all var(--transition-fast);
+}
+
+.contact-row .btn-remove-contact:hover {
+  background: var(--danger-light);
+}
+
+.btn-add-contact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all var(--transition);
+}
+
+.btn-add-contact:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-glow);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESERVATION DETAIL CARD
+   ═══════════════════════════════════════════════════════════════ */
+
+.reservation-detail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.reservation-detail .detail-section {
+  padding: 16px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.reservation-detail .detail-section h4 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reservation-detail .detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.9rem;
+}
+
+.reservation-detail .detail-row + .detail-row {
+  border-top: 1px solid var(--border-light);
+}
+
+.reservation-detail .detail-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.reservation-detail .detail-value {
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .reservation-detail { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FOCUS & ACCESSIBILITY
+   ═══════════════════════════════════════════════════════════════ */
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+button:focus-visible, .btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--primary-glow);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STALE DATA INDICATOR
+   ═══════════════════════════════════════════════════════════════ */
+
+.stale-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--warning-light);
+  color: var(--warning);
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.stale-banner:hover {
+  background: var(--warning);
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EVENT TYPE BADGES
+   ═══════════════════════════════════════════════════════════════ */
+
+.event-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--primary-glow), rgba(201, 162, 39, 0.1));
+  color: var(--primary);
+  border: 1px solid var(--primary-glow);
+}
