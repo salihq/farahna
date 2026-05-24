@@ -10,15 +10,35 @@ window.Services = {};
 // ═══════════════════════════════════════════════════════════════
 
 window.Services.Pricing = {
-  calculateVendorCost(vendor, guests) {
-    if (vendor.pricingType === 'perPerson') {
-      return vendor.price * (guests || 1);
+  calculateVendorCost(vendor, guests, dateStr) {
+    let base = vendor.pricingType === 'perPerson'
+      ? vendor.price * (guests || 1)
+      : vendor.price;
+
+    // Add weekend surcharges
+    if (dateStr) {
+      const dayOfWeek = new Date(dateStr).getDay(); // 0=Sun, 5=Fri, 6=Sat
+      if (dayOfWeek === 5 && vendor.fridaySurcharge) {
+        base += vendor.fridaySurcharge;
+      }
+      if (dayOfWeek === 6 && vendor.saturdaySurcharge) {
+        base += vendor.saturdaySurcharge;
+      }
+
+      // Add specific date surcharge (stacks with weekend)
+      if (vendor.specialPricing && vendor.specialPricing.length > 0) {
+        const special = vendor.specialPricing.find(sp => sp.dateStr === dateStr);
+        if (special && special.price) {
+          base += special.price;
+        }
+      }
     }
-    return vendor.price;
+
+    return base;
   },
 
-  calculateCartTotal(vendors, guests) {
-    return vendors.reduce((sum, v) => sum + this.calculateVendorCost(v, guests), 0);
+  calculateCartTotal(vendors, guests, dateStr) {
+    return vendors.reduce((sum, v) => sum + this.calculateVendorCost(v, guests, dateStr), 0);
   },
 
   getBudgetStatus(total, budget) {

@@ -286,7 +286,8 @@ async function renderOrgPlan(container) {
   // ─── Update Cart UI ────────────────────────────────────────
   const updateCartUI = () => {
     const guests = parseInt(document.getElementById('plan-guests').value) || 100;
-    const total = window.Services.Pricing.calculateCartTotal(cart.vendors, guests);
+    const dateStr = document.getElementById('plan-date').value;
+    const total = window.Services.Pricing.calculateCartTotal(cart.vendors, guests, dateStr);
 
     document.getElementById('cart-count').textContent = cart.vendors.length;
     document.getElementById('cart-sum').textContent = window.Services.Pricing.formatPrice(total);
@@ -297,10 +298,15 @@ async function renderOrgPlan(container) {
     } else {
       let html = '';
       cart.vendors.forEach((v, i) => {
-        const cost = window.Services.Pricing.calculateVendorCost(v, guests);
-        const costLabel = v.pricingType === 'perPerson'
-          ? v.price + ' × ' + guests + ' = ' + window.Services.Pricing.formatPrice(cost)
-          : window.Services.Pricing.formatPrice(cost);
+        const cost = window.Services.Pricing.calculateVendorCost(v, guests, dateStr);
+        const baseCost = window.Services.Pricing.calculateVendorCost(v, guests); // without date
+        const surcharge = cost - baseCost;
+        let costLabel = v.pricingType === 'perPerson'
+          ? v.price + ' × ' + guests + ' = ' + window.Services.Pricing.formatPrice(baseCost)
+          : window.Services.Pricing.formatPrice(baseCost);
+        if (surcharge > 0) {
+          costLabel += ' <span style="color:var(--warning); font-size:0.8rem;">+' + window.Services.Pricing.formatPrice(surcharge) + '</span>';
+        }
         html += '<div class="cart-item">' +
           '<div class="cart-item-info">' +
             '<div class="cart-item-name">' + v.name + '</div>' +
@@ -1002,7 +1008,7 @@ async function renderOrgVendors(container) {
         let border = isToday ? '2px solid var(--primary)' : '1px solid #eee';
         if (isBooked) bookedCount++; else freeCount++;
 
-        html += '<div class="calendar-day" data-date="' + dateStr + '" style="background:'+bg+'; color:'+color+'; border:'+border+'; padding:16px 4px; border-radius:8px; cursor:pointer; display:flex; flex-direction:column; align-items:center;">' +
+        html += '<div class="calendar-day" style="background:'+bg+'; color:'+color+'; border:'+border+'; padding:16px 4px; border-radius:8px; cursor:default; display:flex; flex-direction:column; align-items:center;">' +
           '<span style="font-size:1.1rem; font-weight:800;">' + d + '</span>' +
           '<span class="day-label" style="font-size:0.75rem;">' + (isBooked ? 'محجوز' : 'متاح') + '</span>' +
         '</div>';
@@ -1013,17 +1019,6 @@ async function renderOrgVendors(container) {
         '<span><i class="fa-solid fa-calendar-check" style="color:var(--success);"></i> ' + freeCount + ' متاح</span>' +
         '<span><i class="fa-solid fa-calendar-xmark" style="color:var(--danger);"></i> ' + bookedCount + ' محجوز</span>' +
         '<span><i class="fa-solid fa-calendar" style="color:var(--text-muted);"></i> ' + daysInMonth + ' إجمالي</span>';
-
-      grid.querySelectorAll('.calendar-day[data-date]').forEach(el => {
-        el.addEventListener('click', async () => {
-          const result = await window.db.toggleVendorBooking(vendorId, el.dataset.date);
-          if (result && result.error) {
-            window.UI.toast(result.error, 'error');
-            return;
-          }
-          drawCalendar();
-        });
-      });
     };
 
     overlay.querySelector('#admin-cal-prev-month').addEventListener('click', () => { currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } drawCalendar(); });
@@ -1422,12 +1417,18 @@ async function renderVendorInbox(container) {
   // Mark individual as read
   container.querySelectorAll('.notif-card').forEach(el => {
     el.addEventListener('click', async () => {
-      await window.db.markNotificationRead(el.dataset.id);
-      // Update unread badge in sidebar
-      const remaining = notifs.filter(n => !n.read && n.id !== el.dataset.id);
-      const badge = document.querySelector('#nav-inbox .notif-badge');
-      if (badge) badge.textContent = remaining.length || '';
+      const nid = el.dataset.id;
+      const notif = notifs.find(n => n.id === nid);
+      if (notif) notif.read = true;
+      await window.db.markNotificationRead(nid);
       el.classList.add('read');
+      // Update unread badge
+      const remaining = notifs.filter(n => !n.read).length;
+      const badge = document.querySelector('#nav-inbox .notif-badge');
+      if (badge) {
+        if (remaining > 0) { badge.textContent = remaining; }
+        else { badge.remove(); }
+      }
     });
   });
 
@@ -1436,6 +1437,7 @@ async function renderVendorInbox(container) {
   if (markAllBtn) {
     markAllBtn.addEventListener('click', async () => {
       await window.db.markAllNotificationsRead(currentUser.id);
+      notifs.forEach(n => n.read = true);
       window.UI.toast('تم تحديد الكل كمقروء', 'success');
       const badge = document.querySelector('#nav-inbox .notif-badge');
       if (badge) badge.remove();
@@ -1782,15 +1784,41 @@ async function renderVendorProfile(container) {
           '</div>' +
           
           '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
-            '<h3><i class="fa-solid fa-calendar-star"></i> أسعار التواريخ الخاصة (أعياد، نهاية أسبوع)</h3>' +
+            '<h3><i class="fa-solid fa-moon"></i> زيادة سعر نهاية الأسبوع</h3>' +
+            '<p class="text-sm text-muted mb-8">مبلغ إضافي يُضاف تلقائياً على السعر الأساسي عند الحجز في أيام الجمعة أو السبت</p>' +
+            '<div class="form-row">' +
+              '<div class="form-group"><label>زيادة يوم الجمعة (ر.س)</label><input type="number" id="p-fri-surcharge" value="' + (currentUser.fridaySurcharge || 0) + '" min="0" placeholder="0"></div>' +
+              '<div class="form-group"><label>زيادة يوم السبت (ر.س)</label><input type="number" id="p-sat-surcharge" value="' + (currentUser.saturdaySurcharge || 0) + '" min="0" placeholder="0"></div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
+            '<h3><i class="fa-solid fa-calendar-star"></i> أسعار تواريخ خاصة</h3>' +
+            '<p class="text-sm text-muted mb-8">مبلغ إضافي يُضاف لتاريخ محدد (أعياد، مواسم). يتراكم مع زيادة نهاية الأسبوع.</p>' +
             '<div id="pricing-list" style="margin-top: 12px;"></div>' +
             '<button type="button" class="btn btn-outline btn-sm mt-8" id="btn-add-pricing"><i class="fa-solid fa-plus"></i> إضافة سعر لتاريخ</button>' +
+          '</div>' +
+
+          '<div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border);">' +
+            '<h3><i class="fa-solid fa-calendar-week"></i> حجز سريع لعطلات نهاية الأسبوع</h3>' +
+            '<p class="text-sm text-muted mb-8">حظر جميع أيام الجمعة والسبت في شهر معين</p>' +
+            '<div class="form-row">' +
+              '<div class="form-group"><label>الشهر</label><select id="quick-block-month"><option value="0">يناير</option><option value="1">فبراير</option><option value="2">مارس</option><option value="3">أبريل</option><option value="4">مايو</option><option value="5">يونيو</option><option value="6">يوليو</option><option value="7">أغسطس</option><option value="8">سبتمبر</option><option value="9">أكتوبر</option><option value="10">نوفمبر</option><option value="11">ديسمبر</option></select></div>' +
+              '<div class="form-group"><label>السنة</label><input type="number" id="quick-block-year" value="' + new Date().getFullYear() + '" min="2024" max="2030"></div>' +
+            '</div>' +
+            '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
+              '<button type="button" class="btn btn-outline btn-sm" id="btn-block-fridays"><i class="fa-solid fa-moon"></i> حظر الجمعة فقط</button>' +
+              '<button type="button" class="btn btn-outline btn-sm" id="btn-block-weekends"><i class="fa-solid fa-umbrella-beach"></i> حظر الجمعة + السبت</button>' +
+            '</div>' +
           '</div>' +
 
           '<button type="submit" class="btn btn-primary" style="margin-top: 32px;"><i class="fa-solid fa-save"></i> حفظ التعديلات</button>' +
         '</form>' +
       '</div>' +
     '</div>';
+
+  // Set quick-block month to current month
+  document.getElementById('quick-block-month').value = new Date().getMonth();
 
   let contacts = [...(currentUser.contacts || [])];
   let specialPricing = [...(currentUser.specialPricing || [])];
@@ -1813,7 +1841,7 @@ async function renderVendorProfile(container) {
     specialPricing.forEach((p, i) => {
       list.innerHTML += '<div style="display:flex; gap:8px; margin-bottom:8px;">' +
         '<input type="date" class="p-date flex-1" value="' + p.dateStr + '">' +
-        '<input type="number" placeholder="السعر" class="p-val flex-1" value="' + p.price + '">' +
+        '<input type="number" placeholder="المبلغ الإضافي" class="p-val flex-1" value="' + p.price + '">' +
         '<button type="button" class="btn btn-danger btn-icon" onclick="window._removePricing(' + i + ')"><i class="fa-solid fa-trash"></i></button>' +
       '</div>';
     });
@@ -1824,6 +1852,29 @@ async function renderVendorProfile(container) {
 
   document.getElementById('btn-add-contact').addEventListener('click', () => { contacts.push({ name: '', phone: '' }); renderContacts(); });
   document.getElementById('btn-add-pricing').addEventListener('click', () => { specialPricing.push({ dateStr: '', price: 0 }); renderPricing(); });
+
+  // Quick block weekends
+  const blockDays = async (dayNums) => {
+    const month = parseInt(document.getElementById('quick-block-month').value);
+    const year = parseInt(document.getElementById('quick-block-year').value);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let blocked = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d);
+      if (dayNums.includes(date.getDay())) {
+        const dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        const result = await window.db.getVendorBookings(currentUser.id);
+        if (!result.includes(dateStr)) {
+          await window.db.toggleVendorBooking(currentUser.id, dateStr);
+          blocked++;
+        }
+      }
+    }
+    const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+    window.UI.toast('تم حظر ' + blocked + ' يوم في ' + months[month] + ' ' + year, 'success');
+  };
+  document.getElementById('btn-block-fridays').addEventListener('click', () => blockDays([5])); // Friday = 5
+  document.getElementById('btn-block-weekends').addEventListener('click', () => blockDays([5, 6])); // Fri + Sat
 
   renderContacts();
   renderPricing();
@@ -1849,6 +1900,8 @@ async function renderVendorProfile(container) {
     currentUser.description = document.getElementById('p-desc').value.trim();
     currentUser.contacts = contacts;
     currentUser.specialPricing = specialPricing;
+    currentUser.fridaySurcharge = parseInt(document.getElementById('p-fri-surcharge').value) || 0;
+    currentUser.saturdaySurcharge = parseInt(document.getElementById('p-sat-surcharge').value) || 0;
     
     await window.db.updateVendor(currentUser);
     window.UI.toast('تم تحديث الملف الشخصي', 'success');

@@ -82,7 +82,7 @@ router.post('/', auth, requireRole('organizer'), async (req, res) => {
 // ─── PUT /:id — Update vendor ───────────────────────────────
 router.put('/:id', auth, async (req, res) => {
   try {
-    const allowedFields = ['name', 'phone', 'price', 'pricingType', 'maxCapacity', 'description', 'photos', 'serviceId', 'location', 'contacts', 'specialPricing'];
+    const allowedFields = ['name', 'phone', 'price', 'pricingType', 'maxCapacity', 'description', 'photos', 'serviceId', 'location', 'contacts', 'specialPricing', 'fridaySurcharge', 'saturdaySurcharge'];
     const updates = {};
 
     for (const field of allowedFields) {

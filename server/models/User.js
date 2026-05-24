@@ -42,6 +42,14 @@ const userSchema = new mongoose.Schema({
     dateStr: String,
     price: Number
   }],
+  fridaySurcharge: {
+    type: Number,
+    default: 0
+  },
+  saturdaySurcharge: {
+    type: Number,
+    default: 0
+  },
   location: {
     type: String,
     default: ''
