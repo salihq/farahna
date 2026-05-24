@@ -926,19 +926,36 @@ async function renderOrgVendors(container) {
     
     let currentMonth = new Date().getMonth();
     let currentYear = new Date().getFullYear();
+    const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
+    let monthOpts = '';
+    months.forEach((m, i) => { monthOpts += '<option value="' + i + '">' + m + '</option>'; });
+    let yearOpts = '';
+    for (let y = currentYear - 2; y <= currentYear + 3; y++) {
+      yearOpts += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + y + '</option>';
+    }
 
     overlay.innerHTML =
-      '<div class="modal-box" style="max-width:600px; max-height:90vh; overflow-y:auto;">' +
+      '<div class="modal-box" style="max-width:650px; max-height:90vh; overflow-y:auto;">' +
         '<div class="modal-title"><i class="fa-solid fa-calendar-days" style="color:var(--primary);"></i> تقويم ' + vendorName + '</div>' +
         '<div class="modal-body">' +
           '<div class="card" style="padding:16px;">' +
-            '<div class="calendar-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">' +
-              '<button class="btn btn-outline btn-sm" id="admin-cal-prev"><i class="fa-solid fa-chevron-right"></i></button>' +
-              '<h3 id="admin-cal-title" style="margin:0;"></h3>' +
-              '<button class="btn btn-outline btn-sm" id="admin-cal-next"><i class="fa-solid fa-chevron-left"></i></button>' +
+            '<div class="calendar-header" style="display:flex; justify-content:center; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;">' +
+              '<div style="display:flex; align-items:center; gap:4px;">' +
+                '<button class="btn btn-outline btn-sm" id="admin-cal-prev-month"><i class="fa-solid fa-chevron-right"></i></button>' +
+                '<select id="admin-cal-month" style="padding:4px 8px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); font-weight:700;">' + monthOpts + '</select>' +
+                '<button class="btn btn-outline btn-sm" id="admin-cal-next-month"><i class="fa-solid fa-chevron-left"></i></button>' +
+              '</div>' +
+              '<div style="display:flex; align-items:center; gap:4px;">' +
+                '<button class="btn btn-outline btn-sm" id="admin-cal-prev-year"><i class="fa-solid fa-forward"></i></button>' +
+                '<select id="admin-cal-year" style="padding:4px 8px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); font-weight:700; font-family:Inter,sans-serif;">' + yearOpts + '</select>' +
+                '<button class="btn btn-outline btn-sm" id="admin-cal-next-year"><i class="fa-solid fa-backward"></i></button>' +
+              '</div>' +
+              '<button class="btn-today" id="admin-cal-today" style="font-size:0.85rem;">📅 اليوم</button>' +
             '</div>' +
             '<div id="admin-cal-grid"></div>' +
-            '<div style="margin-top:16px; display:flex; gap:20px; font-size:0.9rem;">' +
+            '<div id="admin-cal-summary" style="display:flex; gap:20px; justify-content:center; margin-top:12px; font-size:0.9rem;"></div>' +
+            '<div style="margin-top:12px; display:flex; gap:20px; justify-content:center; font-size:0.85rem;">' +
               '<span style="display:flex; align-items:center; gap:6px;"><span style="width:14px;height:14px;border-radius:50%;background:var(--success);display:inline-block;"></span> متاح</span>' +
               '<span style="display:flex; align-items:center; gap:6px;"><span style="width:14px;height:14px;border-radius:50%;background:var(--danger);display:inline-block;"></span> محجوز</span>' +
             '</div>' +
@@ -951,26 +968,31 @@ async function renderOrgVendors(container) {
     overlay.querySelector('#cal-close').addEventListener('click', () => document.body.removeChild(overlay));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
 
+    const monthSelect = overlay.querySelector('#admin-cal-month');
+    const yearSelect = overlay.querySelector('#admin-cal-year');
+    monthSelect.value = currentMonth;
+
     const drawCalendar = async () => {
+      monthSelect.value = currentMonth;
+      yearSelect.value = currentYear;
+
       const bookings = await window.db.getVendorBookings(vendorId);
-      const title = document.getElementById('admin-cal-title');
       const grid = document.getElementById('admin-cal-grid');
-      const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-      title.textContent = months[currentMonth] + ' ' + currentYear;
+      const summary = document.getElementById('admin-cal-summary');
 
       const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-      const firstDay = new Date(currentYear, currentMonth, 1).getDay(); // 0=Sun
+      const firstDay = new Date(currentYear, currentMonth, 1).getDay();
       const today = new Date().toISOString().slice(0, 10);
       const dayNames = ['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
 
       let html = '<div class="calendar-grid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center;">';
       dayNames.forEach(d => { html += '<div class="calendar-day-header" style="font-weight:bold; padding:8px 0;">' + d + '</div>'; });
 
-      // Empty cells
       for (let i = 0; i < firstDay; i++) {
         html += '<div class="calendar-day empty" style="padding:16px;"></div>';
       }
 
+      let bookedCount = 0, freeCount = 0;
       for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = currentYear + '-' + String(currentMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
         const isBooked = bookings.includes(dateStr);
@@ -978,6 +1000,7 @@ async function renderOrgVendors(container) {
         let bg = isBooked ? 'var(--danger-light)' : 'var(--success-light)';
         let color = isBooked ? 'var(--danger)' : 'var(--success)';
         let border = isToday ? '2px solid var(--primary)' : '1px solid #eee';
+        if (isBooked) bookedCount++; else freeCount++;
 
         html += '<div class="calendar-day" data-date="' + dateStr + '" style="background:'+bg+'; color:'+color+'; border:'+border+'; padding:16px 4px; border-radius:8px; cursor:pointer; display:flex; flex-direction:column; align-items:center;">' +
           '<span style="font-size:1.1rem; font-weight:800;">' + d + '</span>' +
@@ -986,25 +1009,30 @@ async function renderOrgVendors(container) {
       }
 
       grid.innerHTML = html + '</div>';
+      summary.innerHTML =
+        '<span><i class="fa-solid fa-calendar-check" style="color:var(--success);"></i> ' + freeCount + ' متاح</span>' +
+        '<span><i class="fa-solid fa-calendar-xmark" style="color:var(--danger);"></i> ' + bookedCount + ' محجوز</span>' +
+        '<span><i class="fa-solid fa-calendar" style="color:var(--text-muted);"></i> ' + daysInMonth + ' إجمالي</span>';
 
       grid.querySelectorAll('.calendar-day[data-date]').forEach(el => {
         el.addEventListener('click', async () => {
-          await window.db.toggleVendorBooking(vendorId, el.dataset.date);
+          const result = await window.db.toggleVendorBooking(vendorId, el.dataset.date);
+          if (result && result.error) {
+            window.UI.toast(result.error, 'error');
+            return;
+          }
           drawCalendar();
         });
       });
     };
 
-    overlay.querySelector('#admin-cal-prev').addEventListener('click', () => {
-      currentMonth--;
-      if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-      drawCalendar();
-    });
-    overlay.querySelector('#admin-cal-next').addEventListener('click', () => {
-      currentMonth++;
-      if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-      drawCalendar();
-    });
+    overlay.querySelector('#admin-cal-prev-month').addEventListener('click', () => { currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } drawCalendar(); });
+    overlay.querySelector('#admin-cal-next-month').addEventListener('click', () => { currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; } drawCalendar(); });
+    overlay.querySelector('#admin-cal-prev-year').addEventListener('click', () => { currentYear++; drawCalendar(); });
+    overlay.querySelector('#admin-cal-next-year').addEventListener('click', () => { currentYear--; drawCalendar(); });
+    monthSelect.addEventListener('change', () => { currentMonth = parseInt(monthSelect.value); drawCalendar(); });
+    yearSelect.addEventListener('change', () => { currentYear = parseInt(yearSelect.value); drawCalendar(); });
+    overlay.querySelector('#admin-cal-today').addEventListener('click', () => { currentMonth = new Date().getMonth(); currentYear = new Date().getFullYear(); drawCalendar(); });
 
     drawCalendar();
   };
@@ -1489,6 +1517,7 @@ async function renderVendorCalendar(container) {
     }
 
     let bookedCount = 0, freeCount = 0;
+    const vendorMeta = JSON.parse(localStorage.getItem('vendor_bookings_meta') || '{}');
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = currentYear + '-' + String(currentMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
@@ -1498,9 +1527,17 @@ async function renderVendorCalendar(container) {
       if (isToday) cls += ' today';
       if (isBooked) bookedCount++; else freeCount++;
 
-      html += '<div class="calendar-day ' + cls + '" data-date="' + dateStr + '">' +
+      // Show client name if vendor saved one
+      const meta = vendorMeta[dateStr];
+      let labelText = isBooked ? 'محجوز' : 'متاح';
+      if (isBooked && meta && meta.name) {
+        labelText = meta.name;
+      }
+
+      html += '<div class="calendar-day ' + cls + '" data-date="' + dateStr + '"' +
+        (meta && meta.name ? ' title="' + meta.name + (meta.phone ? ' — ' + meta.phone : '') + '"' : '') + '>' +
         '<span style="font-size:1.1rem; font-weight:800;">' + d + '</span>' +
-        '<span class="day-label">' + (isBooked ? 'محجوز' : 'متاح') + '</span>' +
+        '<span class="day-label" style="font-size:0.7rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + labelText + '</span>' +
       '</div>';
     }
 
@@ -1513,12 +1550,80 @@ async function renderVendorCalendar(container) {
 
     grid.querySelectorAll('.calendar-day:not(.empty)').forEach(el => {
       el.addEventListener('click', async () => {
-        const result = await window.db.toggleVendorBooking(currentUser.id, el.dataset.date);
-        if (result && result.error) {
-          window.UI.toast(result.error, 'error');
-          return;
+        const dateStr = el.dataset.date;
+        const isBooked = el.classList.contains('booked');
+
+        if (isBooked) {
+          // Unblocking — confirm first, show existing info if any
+          const vendorMeta2 = JSON.parse(localStorage.getItem('vendor_bookings_meta') || '{}');
+          const existing = vendorMeta2[dateStr];
+          let confirmMsg = 'هل تريد إلغاء حظر تاريخ ' + dateStr + '؟';
+          if (existing && existing.name) {
+            confirmMsg = 'هل تريد إلغاء حجز ' + existing.name + ' بتاريخ ' + dateStr + '؟';
+          }
+          const ok = await window.UI.confirm(confirmMsg);
+          if (!ok) return;
+          const result = await window.db.toggleVendorBooking(currentUser.id, dateStr);
+          if (result && result.error) {
+            window.UI.toast(result.error, 'error');
+            return;
+          }
+          // Cleanup saved metadata
+          if (vendorMeta2[dateStr]) {
+            delete vendorMeta2[dateStr];
+            localStorage.setItem('vendor_bookings_meta', JSON.stringify(vendorMeta2));
+          }
+          window.UI.toast('تم إلغاء الحظر', 'info');
+          drawCalendar();
+        } else {
+          // Blocking — show form to add optional client info
+          const popup = document.createElement('div');
+          popup.className = 'modal-overlay';
+          popup.innerHTML =
+            '<div class="modal-box" style="max-width:420px;">' +
+              '<div class="modal-title"><i class="fa-solid fa-calendar-plus" style="color:var(--primary);"></i> حجز تاريخ ' + dateStr + '</div>' +
+              '<div class="modal-body">' +
+                '<p class="text-sm text-muted mb-16">يمكنك إضافة بيانات العميل (اختياري). هذه البيانات تظهر لك فقط.</p>' +
+                '<div class="form-group"><label>اسم العميل</label><input type="text" id="vb-name" placeholder="مثال: أحمد محمد"></div>' +
+                '<div class="form-group"><label>رقم الجوال</label><input type="text" id="vb-phone" placeholder="05xxxxxxxx" style="direction:ltr;"></div>' +
+                '<div class="form-group"><label>رقم إضافي (اختياري)</label><input type="text" id="vb-phone2" placeholder="05xxxxxxxx" style="direction:ltr;"></div>' +
+                '<div class="form-group"><label>ملاحظات</label><textarea id="vb-notes" rows="2" placeholder="أي ملاحظات..."></textarea></div>' +
+              '</div>' +
+              '<div class="modal-actions">' +
+                '<button class="btn btn-outline" id="vb-cancel">إلغاء</button>' +
+                '<button class="btn btn-ghost" id="vb-quick">حجز بدون بيانات</button>' +
+                '<button class="btn btn-primary" id="vb-save"><i class="fa-solid fa-check"></i> حجز وحفظ</button>' +
+              '</div>' +
+            '</div>';
+          document.body.appendChild(popup);
+          popup.querySelector('#vb-cancel').addEventListener('click', () => document.body.removeChild(popup));
+          popup.addEventListener('click', (e) => { if (e.target === popup) document.body.removeChild(popup); });
+
+          const doBlock = async (withData) => {
+            const result = await window.db.toggleVendorBooking(currentUser.id, dateStr);
+            if (result && result.error) {
+              window.UI.toast(result.error, 'error');
+              return;
+            }
+            if (withData) {
+              // Save vendor booking metadata to localStorage (private to vendor)
+              const meta = JSON.parse(localStorage.getItem('vendor_bookings_meta') || '{}');
+              meta[dateStr] = {
+                name: document.getElementById('vb-name').value.trim(),
+                phone: document.getElementById('vb-phone').value.trim(),
+                phone2: document.getElementById('vb-phone2').value.trim(),
+                notes: document.getElementById('vb-notes').value.trim()
+              };
+              localStorage.setItem('vendor_bookings_meta', JSON.stringify(meta));
+            }
+            document.body.removeChild(popup);
+            window.UI.toast('تم حجز التاريخ بنجاح', 'success');
+            drawCalendar();
+          };
+
+          popup.querySelector('#vb-quick').addEventListener('click', () => doBlock(false));
+          popup.querySelector('#vb-save').addEventListener('click', () => doBlock(true));
         }
-        drawCalendar();
       });
     });
   };
